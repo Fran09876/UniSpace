@@ -1,0 +1,16 @@
+@import "tailwindcss";
+
+body {
+  @apply bg-white text-gray-800 antialiased;
+}
+
+/* Sobrescribir colores de FullCalendar para mantener diseño minimalista */
+:root {
+  --fc-button-bg-color: #4b5563; /* Gris */
+  --fc-button-border-color: #4b5563;
+  --fc-button-hover-bg-color: #374151; /* Gris más oscuro al pasar el mouse */
+  --fc-button-hover-border-color: #374151;
+  --fc-button-active-bg-color: #1f2937; /* Gris casi negro al hacer clic */
+  --fc-button-active-border-color: #1f2937;
+  --fc-today-bg-color: #f3f4f6; /* Fondo sutil para el día actual */
+}
