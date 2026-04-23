@@ -36,7 +36,7 @@ const registrarUsuario = async (req, res) => {
 const loginUsuario = async (req, res) => {
   try {
     const { correo, password } = req.body;
-
+    console.log("👉 Intento de Login recibido. Correo:", correo, " | Pass:", password);
     // Buscar al usuario
     const usuario = await Usuario.findOne({ where: { correo } });
     if (!usuario) {
@@ -57,10 +57,15 @@ const loginUsuario = async (req, res) => {
     );
 
     // Devolvemos el token que Sabas guardará en el localStorage
+    // Devolvemos el token que Sabas guardará en el localStorage
     res.json({ 
       mensaje: 'Login exitoso', 
       token, 
-      usuario: { nombre: usuario.nombre_completo, rol: usuario.rol } 
+      usuario: { 
+        id: usuario.id_usuario,
+        nombre: usuario.nombre_completo, 
+        rol: usuario.rol 
+      } 
     });
   } catch (error) {
     console.error(error);

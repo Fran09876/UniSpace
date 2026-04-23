@@ -10,19 +10,19 @@ export default function Login() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const handleLogin = async (e) => {
+const handleLogin = async (e) => {
     e.preventDefault();
     setError('');
     setLoading(true);
 
     try {
-      const response = await fetch('https://fakestoreapi.com/auth/login', {
+      const response = await fetch('http://localhost:4000/api/auth/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          username: username,
+          correo: username, 
           password: password,
         }),
       });
@@ -30,14 +30,14 @@ export default function Login() {
       const data = await response.json();
 
       if (response.ok && data.token) {
-        // Guardamos el token en localStorage
         localStorage.setItem('token', data.token);
+        localStorage.setItem('user', JSON.stringify(data.usuario));
         navigate('/dashboard');
       } else {
-        setError('Usuario o contraseña incorrectos');
+        setError(data.mensaje || 'Usuario o contraseña incorrectos');
       }
     } catch (err) {
-      setError('Hubo un problema con la conexión al servidor');
+      setError('No hay conexión con el servidor. Revisa la terminal del puerto 4000.');
     } finally {
       setLoading(false);
     }

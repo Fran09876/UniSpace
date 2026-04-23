@@ -96,6 +96,8 @@ export default function DashboardLayout() {
     navigate('/', { replace: true });
   };
 
+  const userData = JSON.parse(localStorage.getItem('user')) || { nombre: 'Invitado', rol: 'Usuario' };
+
   return (
     <div className="min-h-screen bg-gray-50 flex font-sans text-gray-900">
       {/* Sidebar */}
@@ -141,8 +143,8 @@ export default function DashboardLayout() {
               FP
             </div>
             <div className="ml-3 min-w-0">
-              <p className="text-sm font-bold text-gray-900 truncate">Francisco Perez</p>
-              <p className="text-xs font-medium text-gray-500">8vo Semestre</p>
+              <p className="text-sm font-bold text-gray-900 truncate">{userData.nombre}</p>
+            <p className="text-xs font-medium text-gray-500">{userData.rol}</p>
             </div>
           </div>
           {/* Botón de cerrar sesión actualizado */}
