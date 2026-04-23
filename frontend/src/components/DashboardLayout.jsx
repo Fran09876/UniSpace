@@ -27,108 +27,50 @@ function InicioView({ onNavigate }) {
     { label: 'Espacios disponibles', value: '12', icon: MapPin },
   ];
 
-  const upcoming = [
-    { space: 'Lab. Sistemas Operativos', date: 'Hoy', time: '10:00 – 12:00', status: 'Confirmada' },
-    { space: 'Auditorio Principal', date: 'Hoy', time: '14:00 – 16:00', status: 'Confirmada' },
-    { space: 'Sala de Cómputo B', date: 'Mañana', time: '09:00 – 11:00', status: 'Pendiente' },
-  ];
-
   return (
-    <div className="space-y-6">
-      {/* Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        {stats.map(({ label, value, icon: Icon }) => (
-          <div key={label} className="bg-white rounded-2xl border border-gray-200 p-5 flex items-center gap-4">
-            <div className="w-10 h-10 rounded-xl bg-gray-100 flex items-center justify-center flex-shrink-0">
-              <Icon className="w-5 h-5 text-gray-700" />
-            </div>
-            <div>
-              <p className="text-xs text-gray-500">{label}</p>
-              <p className="text-lg font-semibold text-gray-900">{value}</p>
+    <div className="space-y-8 animate-in fade-in duration-500">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {stats.map((stat) => (
+          <div key={stat.label} className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
+            <div className="flex items-center gap-4">
+              <div className="p-3 bg-gray-50 rounded-xl text-gray-900">
+                <stat.icon className="w-6 h-6" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-gray-500">{stat.label}</p>
+                <p className="text-2xl font-bold text-gray-900">{stat.value}</p>
+              </div>
             </div>
           </div>
         ))}
       </div>
 
-      {/* Welcome card */}
-      <div className="bg-gray-900 rounded-2xl p-6 sm:p-8 text-white flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-xl font-semibold mb-1">¡Bienvenido de nuevo, Francisco!</h2>
-          <p className="text-gray-400 text-sm">Tienes 3 reservas activas esta semana.</p>
-        </div>
-        <button
-          onClick={() => onNavigate('calendario')}
-          className="flex items-center gap-2 bg-white text-gray-900 px-5 py-2.5 rounded-xl text-sm font-medium hover:bg-gray-100 transition-colors flex-shrink-0"
-        >
-          Ver calendario
-          <ChevronRight className="w-4 h-4" />
-        </button>
-      </div>
-
-      {/* Upcoming reservations */}
-      <div className="bg-white rounded-2xl border border-gray-200">
-        <div className="px-6 py-4 border-b border-gray-100">
-          <h3 className="font-semibold text-gray-900">Próximas reservas</h3>
-        </div>
-        <div className="divide-y divide-gray-100">
-          {upcoming.map((item) => (
-            <div key={item.space} className="px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <div>
-                <p className="font-medium text-gray-900 text-sm">{item.space}</p>
-                <p className="text-xs text-gray-500 mt-0.5">{item.date} · {item.time}</p>
-              </div>
-              <span className={`self-start sm:self-auto text-xs font-medium px-2.5 py-1 rounded-full ${
-                item.status === 'Confirmada'
-                  ? 'bg-green-50 text-green-700'
-                  : 'bg-yellow-50 text-yellow-700'
-              }`}>
-                {item.status}
-              </span>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function ReservasView() {
-  const reservas = [
-    { id: 1, space: 'Lab. Sistemas Operativos', date: '15 Abr 2026', time: '10:00 – 12:00', status: 'Confirmada' },
-    { id: 2, space: 'Auditorio Principal', date: '15 Abr 2026', time: '14:00 – 16:00', status: 'Confirmada' },
-    { id: 3, space: 'Sala de Cómputo B', date: '16 Abr 2026', time: '09:00 – 11:00', status: 'Pendiente' },
-    { id: 4, space: 'Sala de Reuniones 3', date: '10 Abr 2026', time: '13:00 – 14:00', status: 'Completada' },
-    { id: 5, space: 'Lab. Redes', date: '8 Abr 2026', time: '08:00 – 10:00', status: 'Completada' },
-  ];
-
-  const statusStyle = {
-    Confirmada: 'bg-green-50 text-green-700',
-    Pendiente: 'bg-yellow-50 text-yellow-700',
-    Completada: 'bg-gray-100 text-gray-600',
-  };
-
-  return (
-    <div className="bg-white rounded-2xl border border-gray-200">
-      <div className="px-6 py-4 border-b border-gray-100">
-        <h3 className="font-semibold text-gray-900">Historial de reservas</h3>
-      </div>
-      <div className="divide-y divide-gray-100">
-        {reservas.map((r) => (
-          <div key={r.id} className="px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0">
-                <MapPin className="w-4 h-4 text-gray-600" />
-              </div>
-              <div>
-                <p className="font-medium text-gray-900 text-sm">{r.space}</p>
-                <p className="text-xs text-gray-500 mt-0.5">{r.date} · {r.time}</p>
-              </div>
-            </div>
-            <span className={`self-start sm:self-auto text-xs font-medium px-2.5 py-1 rounded-full ${statusStyle[r.status]}`}>
-              {r.status}
-            </span>
+      <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
+        <div className="p-8 md:p-12 text-center max-w-2xl mx-auto">
+          <div className="w-20 h-20 bg-gray-900 rounded-3xl flex items-center justify-center mx-auto mb-8 rotate-3 shadow-xl">
+            <Calendar className="w-10 h-10 text-white" />
           </div>
-        ))}
+          <h2 className="text-3xl font-bold text-gray-900 mb-4 tracking-tight">
+            Bienvenido a UniSpace
+          </h2>
+          <p className="text-lg text-gray-500 mb-10 leading-relaxed">
+            Tu plataforma centralizada para la gestión de laboratorios y espacios académicos en el TecNM.
+          </p>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+            <button
+              onClick={() => onNavigate('calendario')}
+              className="w-full sm:w-auto px-8 py-4 bg-gray-900 text-white font-semibold rounded-2xl hover:bg-black transition-all hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-gray-200"
+            >
+              Nueva Reserva
+            </button>
+            <button
+              onClick={() => onNavigate('reservas')}
+              className="w-full sm:w-auto px-8 py-4 bg-white text-gray-700 font-semibold rounded-2xl border border-gray-200 hover:bg-gray-50 transition-all"
+            >
+              Ver Mis Reservas
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -136,81 +78,77 @@ function ReservasView() {
 
 export default function DashboardLayout() {
   const navigate = useNavigate();
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [view, setView] = useState('inicio');
 
-  const handleNavClick = (id) => {
-    setView(id);
-    setIsSidebarOpen(false); // cierra sidebar en móvil al navegar
+  const pageTitles = {
+    inicio: 'Panel de Control',
+    calendario: 'Calendario de Espacios',
+    reservas: 'Mis Reservas',
   };
 
-  const pageTitles = {
-    inicio: 'Inicio',
-    calendario: 'Calendario',
-    reservas: 'Mis Reservas',
+  // Nueva función para manejar el cierre de sesión real
+  const handleLogout = () => {
+    // 1. Eliminamos el token de sesión del almacenamiento local
+    localStorage.removeItem('token');
+    
+    // 2. Redirigimos al Login eliminando la posibilidad de volver atrás en el historial
+    navigate('/', { replace: true });
   };
 
   return (
     <div className="min-h-screen bg-gray-50 flex font-sans text-gray-900">
-
-      {/* Overlay móvil */}
-      {isSidebarOpen && (
-        <div
-          className="fixed inset-0 bg-black/30 z-30 lg:hidden"
-          onClick={() => setIsSidebarOpen(false)}
-        />
-      )}
-
       {/* Sidebar */}
-      <aside className={`
-        fixed lg:static inset-y-0 left-0 z-40 w-64 bg-white border-r border-gray-200
-        flex flex-col
-        transform transition-transform duration-300 ease-in-out
-        ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
-      `}>
-        {/* Logo */}
-        <div className="h-16 flex items-center px-6 border-b border-gray-200">
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-gray-900 flex items-center justify-center">
-              <MapPin className="w-4 h-4 text-white" />
-            </div>
-            <span className="font-semibold text-gray-900 text-lg">UniSpace</span>
+      <aside
+        className={`fixed lg:static inset-y-0 left-0 z-50 w-72 bg-white border-r border-gray-100 transform transition-all duration-300 ease-in-out flex flex-col ${
+          isSidebarOpen ? 'translate-x-0 shadow-2xl lg:shadow-none' : '-translate-x-full lg:-ml-72'
+        }`}
+      >
+        <div className="h-20 flex items-center px-8 border-b border-gray-50">
+          <div className="w-10 h-10 bg-gray-900 rounded-xl mr-4 flex items-center justify-center shadow-lg">
+            <div className="w-5 h-5 bg-white rounded-full opacity-20 animate-pulse"></div>
           </div>
+          <span className="font-bold text-2xl tracking-tighter uppercase italic">UniSpace</span>
         </div>
 
-        {/* Nav */}
-        <nav className="flex-1 px-4 py-6 space-y-1">
-          {navigation.map(({ id, name, icon: Icon }) => (
+        <nav className="flex-1 px-4 py-8 space-y-2">
+          {navigation.map((item) => (
             <button
-              key={id}
-              onClick={() => handleNavClick(id)}
-              className={`
-                w-full flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-xl transition-colors
-                ${view === id
-                  ? 'bg-gray-900 text-white'
-                  : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'}
-              `}
+              key={item.id}
+              onClick={() => {
+                setView(item.id);
+                if (window.innerWidth < 1024) setIsSidebarOpen(false);
+              }}
+              className={`w-full flex items-center px-4 py-3.5 text-sm font-semibold rounded-2xl transition-all group ${
+                view === item.id
+                  ? 'bg-gray-900 text-white shadow-lg shadow-gray-200'
+                  : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'
+              }`}
             >
-              <Icon className="w-4 h-4 flex-shrink-0" />
-              {name}
+              <item.icon
+                className={`w-5 h-5 mr-4 transition-transform group-hover:scale-110 ${
+                  view === item.id ? 'text-white' : 'text-gray-400'
+                }`}
+              />
+              {item.name}
             </button>
           ))}
         </nav>
 
-        {/* Profile + Logout */}
-        <div className="p-4 border-t border-gray-200 space-y-3">
-          <div className="flex items-center gap-3 px-1">
-            <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-xs font-bold text-gray-700 flex-shrink-0">
+        <div className="p-6 border-t border-gray-50 space-y-4">
+          <div className="flex items-center px-2">
+            <div className="w-11 h-11 rounded-2xl bg-gray-100 border border-gray-200 flex items-center justify-center text-gray-700 font-bold shadow-sm">
               FP
             </div>
-            <div className="min-w-0">
-              <p className="text-xs font-semibold text-gray-900 truncate">Francisco Perez</p>
-              <p className="text-[10px] text-gray-500">8vo Semestre</p>
+            <div className="ml-3 min-w-0">
+              <p className="text-sm font-bold text-gray-900 truncate">Francisco Perez</p>
+              <p className="text-xs font-medium text-gray-500">8vo Semestre</p>
             </div>
           </div>
+          {/* Botón de cerrar sesión actualizado */}
           <button
-            onClick={() => navigate('/')}
-            className="w-full flex items-center justify-center gap-2 py-2 px-3 text-xs font-medium text-red-600 bg-red-50 rounded-xl hover:bg-red-100 transition-colors"
+            onClick={handleLogout}
+            className="w-full flex items-center justify-center gap-2 py-3 px-4 text-sm font-bold text-red-600 bg-red-50 rounded-2xl hover:bg-red-100 transition-all active:scale-[0.98]"
           >
             <LogOut className="w-4 h-4" />
             Cerrar sesión
@@ -219,25 +157,34 @@ export default function DashboardLayout() {
       </aside>
 
       {/* Main content */}
-      <div className="flex-1 flex flex-col min-w-0">
-        {/* Header */}
-        <header className="h-16 bg-white border-b border-gray-200 flex items-center px-4 sm:px-6 gap-4 sticky top-0 z-20">
-          {/* Hamburger button (only mobile) */}
+      <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
+        <header className="h-20 bg-white/80 backdrop-blur-md border-b border-gray-100 flex items-center px-6 sm:px-10 gap-4 sticky top-0 z-40">
           <button
             onClick={() => setIsSidebarOpen((prev) => !prev)}
-            className="lg:hidden p-2 rounded-lg hover:bg-gray-100 text-gray-600 transition-colors"
-            aria-label="Abrir menú"
+            className="p-2.5 rounded-xl hover:bg-gray-100 text-gray-600 transition-colors shadow-sm bg-white border border-gray-100"
           >
             {isSidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
-          <h1 className="text-lg font-semibold text-gray-900">{pageTitles[view]}</h1>
+          <div className="h-6 w-[1px] bg-gray-200 mx-2"></div>
+          <h1 className="text-xl font-bold text-gray-900 tracking-tight">{pageTitles[view]}</h1>
         </header>
 
-        {/* Page content */}
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
-          {view === 'inicio' && <InicioView onNavigate={setView} />}
-          {view === 'calendario' && <CalendarView />}
-          {view === 'reservas' && <ReservasView />}
+        <main className="flex-1 overflow-y-auto p-6 sm:p-10 scroll-smooth">
+          <div className="max-w-6xl mx-auto">
+            {view === 'inicio' && <InicioView onNavigate={setView} />}
+            {view === 'calendario' && (
+              <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+                <CalendarView />
+              </div>
+            )}
+            {view === 'reservas' && (
+              <div className="text-center py-20 bg-white rounded-3xl border border-gray-100">
+                <BookMarked className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+                <h3 className="text-lg font-bold text-gray-900">Historial de Reservas</h3>
+                <p className="text-gray-500">Próximamente podrás ver tus reservas aquí.</p>
+              </div>
+            )}
+          </div>
         </main>
       </div>
     </div>

@@ -2,17 +2,33 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import Login from './components/Login';
 import DashboardLayout from './components/DashboardLayout';
 
+const ProtectedRoute = ({ children }) => {
+  const token = localStorage.getItem('token');
+  
+  if (!token) {
+    return <Navigate to="/" replace />;
+  }
+
+  return children;
+};
+
 function App() {
   return (
     <Router>
       <Routes>
-        {/* Ruta principal: Login */}
+        {/* Ruta pública */}
         <Route path="/" element={<Login />} />
         
-        {/* Ruta del Panel Principal */}
-        <Route path="/dashboard" element={<DashboardLayout />} />
+        {/* Rutas Privadas envueltas en el Guardián */}
+        <Route 
+          path="/dashboard" 
+          element={
+            <ProtectedRoute>
+              <DashboardLayout />
+            </ProtectedRoute>
+          } 
+        />
         
-        {/* Redirección por defecto si la ruta no existe */}
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
     </Router>

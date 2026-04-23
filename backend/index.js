@@ -4,10 +4,17 @@ const sequelize = require('./database');
 const Usuario = require('./models/Usuario');
 const Recurso = require('./models/Recurso');
 const Reserva = require('./models/Reserva');
-
+const recursoRoutes = require('./routes/recursoRoutes');
 const app = express();
+const authRoutes = require('./routes/authRoutes');
+const reservaRoutes = require('./routes/reservaRoutes');
+
+
 app.use(cors());
 app.use(express.json());
+app.use('/api/auth', authRoutes);
+app.use('/api/recursos', recursoRoutes);
+app.use('/api/reservas', reservaRoutes);
 
 // Esta ruta hará que el navegador muestre un mensaje en lugar de un error
 app.get('/', (req, res) => {
