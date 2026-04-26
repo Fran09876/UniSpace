@@ -3,6 +3,7 @@ const { Op } = require('sequelize');
 const Reserva = require('../models/Reserva');
 const Recurso = require('../models/Recurso');
 const Usuario = require('../models/Usuario');
+const { enviarCorreoReserva } = require('../services/emailService'); // ← AÑADIDO
 
 const STATUS_COLORS = {
   confirmada: '#16a34a',
@@ -184,14 +185,21 @@ const obtenerReservasPendientes = async (req, res) => {
 // POST /api/reservas/gestionar/:id_reserva
 const gestionarReserva = async (req, res) => {
   try {
-    const { id_reserva } = req.params;   // UUID string — funciona directo con Sequelize
+    const { id_reserva } = req.params;
     const { nuevoEstado } = req.body;
 
     if (!['confirmada', 'cancelada'].includes(nuevoEstado)) {
       return res.status(400).json({ mensaje: 'Estado no válido.' });
     }
 
-    const reserva = await Reserva.findByPk(id_reserva);
+    // ── MODIFICADO: se incluyen Usuario y Recurso para tener los datos del correo ──
+    const reserva = await Reserva.findByPk(id_reserva, {
+      include: [
+        { model: Usuario, attributes: ['nombre_completo', 'correo'] },
+        { model: Recurso, attributes: ['nombre'] },
+      ],
+    });
+
     if (!reserva) {
       return res.status(404).json({ mensaje: 'Reserva no encontrada.' });
     }
@@ -220,6 +228,17 @@ const gestionarReserva = async (req, res) => {
       );
       canceladas = filas;
     }
+
+    // ── AÑADIDO: enviar correo al solicitante de forma no bloqueante ──
+    if (reserva.Usuario?.correo) {
+      enviarCorreoReserva({
+        to:     reserva.Usuario.correo,
+        nombre: reserva.Usuario.nombre_completo,
+        estado: nuevoEstado,
+        reserva,                  // lleva reserva.Recurso.nombre, fecha, horas
+      }).catch((err) => console.error('enviarCorreoReserva (async):', err));
+    }
+    // ── FIN bloque añadido ──
 
     res.json({
       mensaje: `Reserva ${nuevoEstado} exitosamente.${
