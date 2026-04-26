@@ -5,23 +5,26 @@ import {
   Menu, X, BellRing, CheckCircle, Clock,
   MapPin, Building,
 } from 'lucide-react';
-import CalendarView      from './CalendarView';
+import CalendarView       from './CalendarView';
 import GestionSolicitudes from './GestionSolicitudes';
-import GestionRecursos   from './GestionRecursos';
-import ReservationsView  from './ReservationsView';
-import { api }           from '../utils/api';
+import GestionRecursos    from './GestionRecursos';
+import ReservationsView   from './ReservationsView';
+import { api }            from '../utils/api';
 
-// --- VISTA DE INICIO CON DATOS REALES ---
 function InicioView({ onNavigate }) {
-  const user = JSON.parse(localStorage.getItem('user')) || {};
+  const user = JSON.parse(localStorage.getItem('user') || '{}');
   const [stats, setStats] = useState({
     reservasActivas:     '—',
     proximaReserva:      '—',
     espaciosDisponibles: '—',
   });
+  const [loadingStats, setLoadingStats] = useState(true);
 
   useEffect(() => {
-    if (!user.id) return;
+    if (!user.id) {
+      setLoadingStats(false);
+      return;
+    }
 
     const loadStats = async () => {
       try {
@@ -39,8 +42,13 @@ function InicioView({ onNavigate }) {
 
         const hoy = new Date();
         hoy.setHours(0, 0, 0, 0);
+
         const proxima = reservas
-          .filter((r) => r.estado !== 'cancelada' && new Date(r.fecha) >= hoy)
+          .filter((r) => {
+            if (r.estado === 'cancelada') return false;
+            const [y, m, d] = String(r.fecha).substring(0, 10).split('-');
+            return new Date(Number(y), Number(m) - 1, Number(d)) >= hoy;
+          })
           .sort((a, b) => {
             const fa = `${a.fecha}T${a.hora_inicio}`;
             const fb = `${b.fecha}T${b.hora_inicio}`;
@@ -48,7 +56,11 @@ function InicioView({ onNavigate }) {
           })[0];
 
         const proximaStr = proxima
-          ? `${new Date(proxima.fecha).toLocaleDateString('es-MX', { month: 'short', day: 'numeric' })} ${String(proxima.hora_inicio).substring(0, 5)}`
+          ? (() => {
+              const [y, m, d] = String(proxima.fecha).substring(0, 10).split('-');
+              const fecha = new Date(Number(y), Number(m) - 1, Number(d));
+              return `${fecha.toLocaleDateString('es-MX', { month: 'short', day: 'numeric' })} ${String(proxima.hora_inicio).substring(0, 5)}`;
+            })()
           : 'Sin pendientes';
 
         const disponibles = recursos.filter((r) => r.estado === 'disponible').length;
@@ -58,8 +70,10 @@ function InicioView({ onNavigate }) {
           proximaReserva:      proximaStr,
           espaciosDisponibles: disponibles,
         });
-      } catch {
-        // Si falla (ej. token expirado), api.js ya redirige. No mostrar error aquí.
+      } catch (err) {
+        console.error('Error cargando stats:', err);
+      } finally {
+        setLoadingStats(false);
       }
     };
 
@@ -83,7 +97,13 @@ function InicioView({ onNavigate }) {
               </div>
               <div>
                 <p className="text-sm font-medium text-gray-500">{stat.label}</p>
-                <p className="text-2xl font-bold text-gray-900">{stat.value}</p>
+                <p className="text-2xl font-bold text-gray-900">
+                  {loadingStats ? (
+                    <span className="inline-block w-8 h-6 bg-gray-100 rounded animate-pulse" />
+                  ) : (
+                    stat.value
+                  )}
+                </p>
               </div>
             </div>
           </div>
@@ -117,35 +137,31 @@ function InicioView({ onNavigate }) {
   );
 }
 
-// --- COMPONENTE PRINCIPAL ---
 export default function DashboardLayout() {
-  const navigate = useNavigate();
+  const navigate  = useNavigate();
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [view, setView] = useState('inicio');
 
-  const userData = JSON.parse(localStorage.getItem('user')) || {
-    nombre: 'Usuario',
-    rol: 'estudiante',
-  };
-
-  const isAdmin = userData.rol === 'admin';
+  const userData = JSON.parse(localStorage.getItem('user') || '{}');
+  const nombre   = userData.nombre || 'Usuario';
+  const isAdmin  = userData.rol === 'admin';
 
   const navigation = [
-    { id: 'inicio',          name: 'Inicio',                  icon: Home      },
-    { id: 'calendario',      name: 'Calendario',              icon: Calendar  },
-    { id: 'reservas',        name: 'Mis Reservas',            icon: BookMarked },
+    { id: 'inicio',           name: 'Inicio',              icon: Home       },
+    { id: 'calendario',       name: 'Calendario',           icon: Calendar   },
+    { id: 'reservas',         name: 'Mis Reservas',         icon: BookMarked },
     ...(isAdmin ? [
-      { id: 'gestion_admin',    name: 'Solicitudes',          icon: BellRing  },
-      { id: 'gestion_recursos', name: 'Gestionar Espacios',   icon: Building  },
+      { id: 'gestion_admin',    name: 'Solicitudes',        icon: BellRing  },
+      { id: 'gestion_recursos', name: 'Gestionar Espacios', icon: Building  },
     ] : []),
   ];
 
   const pageTitles = {
-    inicio:            'Panel de Control',
-    calendario:        'Calendario de Espacios',
-    reservas:          'Mis Reservas',
-    gestion_admin:     'Administración de Solicitudes',
-    gestion_recursos:  'Gestión de Recursos',
+    inicio:           'Panel de Control',
+    calendario:       'Calendario de Espacios',
+    reservas:         'Mis Reservas',
+    gestion_admin:    'Administración de Solicitudes',
+    gestion_recursos: 'Gestión de Recursos',
   };
 
   const handleLogout = () => {
@@ -160,7 +176,6 @@ export default function DashboardLayout() {
 
   return (
     <div className="min-h-screen bg-gray-50 flex font-sans text-gray-900">
-      {/* Overlay móvil */}
       {isSidebarOpen && (
         <div
           className="fixed inset-0 z-40 bg-black/30 lg:hidden"
@@ -170,13 +185,22 @@ export default function DashboardLayout() {
 
       {/* Sidebar */}
       <aside className={`fixed lg:static inset-y-0 left-0 z-50 w-72 bg-white border-r border-gray-100
-        flex flex-col transform transition-all duration-300
+        flex flex-col transform transition-all duration-300 ease-in-out
         ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:-ml-72'}`}
       >
         <div className="h-20 flex items-center px-8 border-b border-gray-50 shrink-0">
-          <div className="w-10 h-10 bg-gray-900 rounded-xl mr-4 flex items-center justify-center shadow-lg">
-            <Calendar className="w-5 h-5 text-white" />
+
+          {/* PUNTO PALPITANTE — animate-ping limpio, sin ícono duplicado */}
+          <div className="relative mr-4 flex items-center justify-center w-10 h-10">
+            {/* Aro externo que hace ping */}
+            <span className="absolute inline-flex h-full w-full rounded-full bg-black opacity-20 animate-ping" />
+            {/* Cuadro negro del logo */}
+            <div className="relative w-10 h-10 bg-gray-900 rounded-xl flex items-center justify-center shadow-lg z-10">
+              {/* Punto blanco interno que pulsa */}
+              <span className="h-3 w-3 bg-white rounded-full animate-pulse" />
+            </div>
           </div>
+
           <span className="font-bold text-2xl tracking-tighter uppercase italic">UniSpace</span>
         </div>
 
@@ -203,11 +227,11 @@ export default function DashboardLayout() {
               className="w-11 h-11 rounded-2xl bg-gray-100 border border-gray-200 flex items-center justify-center text-gray-700 font-bold shadow-sm shrink-0"
               translate="no"
             >
-              {userData.nombre.substring(0, 2).toUpperCase()}
+              {nombre.substring(0, 2).toUpperCase()}
             </div>
             <div className="ml-3 min-w-0">
               <p className="text-sm font-bold text-gray-900 truncate" translate="no">
-                {userData.nombre}
+                {nombre}
               </p>
               <p className="text-xs font-medium text-gray-500 uppercase">{userData.rol}</p>
             </div>
@@ -222,12 +246,12 @@ export default function DashboardLayout() {
         </div>
       </aside>
 
-      {/* Contenido */}
-      <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
+      {/* Contenido principal */}
+      <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden transition-all duration-300 ease-in-out">
         <header className="h-20 bg-white/80 backdrop-blur-md border-b border-gray-100 flex items-center px-4 sm:px-8 gap-4 sticky top-0 z-30 shrink-0">
           <button
             onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-            className="p-2.5 rounded-xl hover:bg-gray-100 text-gray-600 border border-gray-100 shadow-sm bg-white"
+            className="p-2.5 rounded-xl hover:bg-gray-100 text-gray-600 border border-gray-100 shadow-sm bg-white transition-transform active:scale-90"
           >
             {isSidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
@@ -239,15 +263,12 @@ export default function DashboardLayout() {
 
         <main className="flex-1 overflow-y-auto p-5 sm:p-10 scroll-smooth">
           <div className="max-w-6xl mx-auto">
-            {view === 'inicio'            && <InicioView onNavigate={setView} />}
-            {view === 'calendario'        && (
-              <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-                <CalendarView />
-              </div>
-            )}
-            {view === 'reservas'          && <ReservationsView onNavigate={setView} />}
-            {view === 'gestion_admin'     && <GestionSolicitudes />}
-            {view === 'gestion_recursos'  && <GestionRecursos />}
+            {view === 'inicio'           && <InicioView onNavigate={setView} />}
+            {/* FIX: Se pasa isSidebarOpen para que CalendarView pueda forzar updateSize() */}
+            {view === 'calendario'       && <CalendarView isSidebarOpen={isSidebarOpen} />}
+            {view === 'reservas'         && <ReservationsView onNavigate={setView} />}
+            {view === 'gestion_admin'    && <GestionSolicitudes />}
+            {view === 'gestion_recursos' && <GestionRecursos />}
           </div>
         </main>
       </div>

@@ -7,17 +7,31 @@ import {
 import { api } from '../utils/api';
 
 const PRIORIDAD_CONFIG = {
-  admin:      { label: 'Admin',   nivel: 3, Icon: Shield,        classes: 'bg-purple-50 border-purple-200 text-purple-700' },
-  docente:    { label: 'Alta',    nivel: 2, Icon: UserCheck,     classes: 'bg-blue-50 border-blue-200 text-blue-700'       },
-  estudiante: { label: 'Normal',  nivel: 1, Icon: GraduationCap, classes: 'bg-gray-50 border-gray-200 text-gray-500'       },
+  admin:      { label: 'Admin',  nivel: 3, Icon: Shield,        classes: 'bg-purple-50 border-purple-200 text-purple-700' },
+  docente:    { label: 'Alta',   nivel: 2, Icon: UserCheck,     classes: 'bg-blue-50 border-blue-200 text-blue-700'       },
+  estudiante: { label: 'Normal', nivel: 1, Icon: GraduationCap, classes: 'bg-gray-50 border-gray-200 text-gray-500'       },
 };
 
 const fmt = {
-  date: (d) => d ? new Date(d).toLocaleDateString('es-MX', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' }) : '—',
+  date: (d) => d
+    ? new Date(d).toLocaleDateString('es-MX', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })
+    : '—',
   time: (t) => t ? String(t).substring(0, 5) : '—',
 };
 
-// --- CARD DE SOLICITUD ---
+const safeJson = async (res) => {
+  try { return await res.json(); } catch { return {}; }
+};
+
+// ---------------------------------------------------------------------------
+// SolicitudCard
+// FIX CRÍTICO: Los botones siempre montan los MISMOS nodos SVG.
+// Antes se hacía {isProcessing ? <RefreshCw/> : <Check/>}, lo que causa que
+// React intente mover/reemplazar nodos SVG en el DOM mientras están animados,
+// disparando el error "insertBefore: node is not a child of this node".
+// Solución: renderizar ambos íconos siempre, y mostrar/ocultar con CSS (opacity
+// + pointer-events), de modo que React nunca desmonta ni mueve esos nodos.
+// ---------------------------------------------------------------------------
 function SolicitudCard({ req, isProcessing, onAction }) {
   const rol    = req.Usuario?.rol || 'estudiante';
   const priCfg = PRIORIDAD_CONFIG[rol] || PRIORIDAD_CONFIG.estudiante;
@@ -31,9 +45,9 @@ function SolicitudCard({ req, isProcessing, onAction }) {
         : 'border-gray-200 hover:shadow-sm'
     }`}>
       <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
-        {/* Información */}
+
+        {/* ── Información ── */}
         <div className="flex-1 min-w-0">
-          {/* Badges en fila */}
           <div className="flex flex-wrap items-center gap-2 mb-2">
             <h3 className="text-sm font-bold text-gray-900">
               {req.Recurso?.nombre ?? 'Espacio'}
@@ -82,18 +96,35 @@ function SolicitudCard({ req, isProcessing, onAction }) {
           )}
         </div>
 
-        {/* Acciones */}
+        {/* ── Acciones ── */}
         <div className="flex lg:flex-col gap-2 border-t lg:border-t-0 lg:border-l border-gray-100 pt-4 lg:pt-0 lg:pl-5 shrink-0">
+
+          {/*
+            FIX: Ambos íconos (RefreshCw y Check) están SIEMPRE en el DOM.
+            Se alternan mediante clases de visibilidad (opacity-0 / opacity-100)
+            para que React nunca mueva ni reemplace nodos SVG durante un commit,
+            eliminando el crash "insertBefore: node is not a child".
+          */}
           <button
             onClick={() => onAction(req.id_reserva, 'confirmada')}
             disabled={isProcessing}
-            className="flex items-center justify-center gap-2 px-5 py-2.5 bg-gray-900 text-white text-sm font-semibold rounded-xl hover:bg-black transition-colors disabled:opacity-50 flex-1 lg:flex-none lg:w-32"
+            className="relative flex items-center justify-center gap-2 px-5 py-2.5 bg-gray-900 text-white text-sm font-semibold rounded-xl hover:bg-black transition-colors disabled:opacity-50 flex-1 lg:flex-none lg:w-32"
           >
-            {isProcessing
-              ? <RefreshCw className="w-4 h-4 animate-spin" />
-              : <Check className="w-4 h-4" />}
+            {/* Spinner: visible solo cuando isProcessing */}
+            <RefreshCw
+              className={`w-4 h-4 absolute left-3 transition-opacity duration-150 ${
+                isProcessing ? 'opacity-100 animate-spin' : 'opacity-0'
+              }`}
+            />
+            {/* Check: visible cuando no está procesando */}
+            <Check
+              className={`w-4 h-4 transition-opacity duration-150 ${
+                isProcessing ? 'opacity-0' : 'opacity-100'
+              }`}
+            />
             Confirmar
           </button>
+
           <button
             onClick={() => onAction(req.id_reserva, 'cancelada')}
             disabled={isProcessing}
@@ -108,12 +139,15 @@ function SolicitudCard({ req, isProcessing, onAction }) {
   );
 }
 
-// --- COMPONENTE PRINCIPAL ---
+// ---------------------------------------------------------------------------
+// GestionSolicitudes — componente principal
+// ---------------------------------------------------------------------------
 export default function GestionSolicitudes() {
   const [requests,   setRequests]   = useState([]);
   const [loading,    setLoading]    = useState(true);
   const [processing, setProcessing] = useState(null);
   const [toast,      setToast]      = useState(null);
+  const [fetchError, setFetchError] = useState(null);
 
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type });
@@ -122,15 +156,18 @@ export default function GestionSolicitudes() {
 
   const fetchRequests = useCallback(async () => {
     setLoading(true);
+    setFetchError(null);
     try {
       const res = await api.get('/reservas/pendientes');
       if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.detalle || err.mensaje || 'Error del servidor');
+        const err = await safeJson(res);
+        throw new Error(err.detalle || err.mensaje || `Error del servidor (${res.status})`);
       }
-      setRequests(await res.json());
+      const data = await safeJson(res);
+      setRequests(Array.isArray(data) ? data : []);
     } catch (err) {
-      showToast(`Error: ${err.message}`, 'error');
+      setFetchError(err.message || 'No se pudo conectar con el servidor.');
+      showToast(`Error al cargar: ${err.message}`, 'error');
     } finally {
       setLoading(false);
     }
@@ -142,30 +179,33 @@ export default function GestionSolicitudes() {
     setProcessing(idReserva);
     try {
       const res  = await api.post(`/reservas/gestionar/${idReserva}`, { nuevoEstado });
-      const data = await res.json();
+      const data = await safeJson(res);
       if (res.ok) {
-        await fetchRequests(); // Recarga para reflejar auto-cancelaciones
         const label = nuevoEstado === 'confirmada' ? 'confirmada' : 'rechazada';
         const extra = data.canceladas > 0
           ? ` Se cancelaron ${data.canceladas} solicitud(es) en conflicto.`
           : '';
         showToast(`✓ Reserva ${label}.${extra}`);
       } else {
-        showToast(data.mensaje || 'Error al procesar.', 'error');
+        showToast(data.mensaje || `Error del servidor (${res.status}).`, 'error');
       }
-    } catch {
-      showToast('Error de conexión.', 'error');
+    } catch (err) {
+      showToast(`Error de conexión: ${err.message || 'sin respuesta.'}`, 'error');
     } finally {
+      // Siempre libera el botón y recarga la lista
       setProcessing(null);
+      await fetchRequests();
     }
   };
 
-  const conConflicto    = requests.filter((r) => r.tiene_conflicto);
-  const sinConflicto    = requests.filter((r) => !r.tiene_conflicto);
-  const hayConflictos   = conConflicto.length > 0;
+  const conConflicto  = requests.filter((r) => r.tiene_conflicto);
+  const sinConflicto  = requests.filter((r) => !r.tiene_conflicto);
+  const hayConflictos = conConflicto.length > 0;
 
   return (
     <div className="animate-in fade-in duration-500 relative">
+
+      {/* Toast */}
       {toast && (
         <div className={`fixed top-5 right-5 z-50 px-5 py-3 rounded-2xl text-sm font-semibold shadow-xl animate-in slide-in-from-top-3 duration-300 max-w-sm ${
           toast.type === 'error' ? 'bg-red-600 text-white' : 'bg-gray-900 text-white'
@@ -179,21 +219,26 @@ export default function GestionSolicitudes() {
         <div>
           <h2 className="text-2xl font-bold text-gray-900 tracking-tight">Solicitudes Pendientes</h2>
           <p className="text-gray-500 mt-1 text-sm">
-            {loading ? 'Cargando...' : `${requests.length} solicitud${requests.length !== 1 ? 'es' : ''} por gestionar`}
+            {loading
+              ? 'Cargando...'
+              : fetchError
+              ? 'Error al cargar solicitudes'
+              : `${requests.length} solicitud${requests.length !== 1 ? 'es' : ''} por gestionar`}
           </p>
         </div>
+        {/* FIX: mismo nodo RefreshCw siempre presente, solo cambia la clase animate-spin */}
         <button
           onClick={fetchRequests}
           disabled={loading}
           className="flex items-center gap-2 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50"
         >
-          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+          <RefreshCw className={`w-4 h-4 transition-transform ${loading ? 'animate-spin' : ''}`} />
           Actualizar
         </button>
       </div>
 
       {/* Leyenda de prioridad */}
-      {!loading && requests.length > 0 && (
+      {!loading && !fetchError && requests.length > 0 && (
         <div className="flex flex-wrap items-center gap-3 mb-6 px-4 py-3 bg-gray-50 rounded-2xl border border-gray-100">
           <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide w-full sm:w-auto">
             Sistema de prioridad:
@@ -207,7 +252,7 @@ export default function GestionSolicitudes() {
         </div>
       )}
 
-      {/* Estado de carga */}
+      {/* Estado: cargando */}
       {loading && (
         <div className="flex items-center justify-center h-48 text-gray-400 gap-3">
           <RefreshCw className="w-5 h-5 animate-spin" />
@@ -215,8 +260,26 @@ export default function GestionSolicitudes() {
         </div>
       )}
 
-      {/* Lista vacía */}
-      {!loading && requests.length === 0 && (
+      {/* Estado: error de carga */}
+      {!loading && fetchError && (
+        <div className="bg-white rounded-2xl border border-red-100 p-10 text-center">
+          <div className="w-14 h-14 bg-red-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
+            <AlertCircle className="w-7 h-7 text-red-400" />
+          </div>
+          <p className="text-gray-800 font-semibold mb-1">No se pudieron cargar las solicitudes</p>
+          <p className="text-sm text-gray-400 mb-6">{fetchError}</p>
+          <button
+            onClick={fetchRequests}
+            className="inline-flex items-center gap-2 px-5 py-2.5 bg-gray-900 text-white text-sm font-semibold rounded-xl hover:bg-black transition-colors"
+          >
+            <RefreshCw className="w-4 h-4" />
+            Reintentar
+          </button>
+        </div>
+      )}
+
+      {/* Estado: lista vacía */}
+      {!loading && !fetchError && requests.length === 0 && (
         <div className="bg-white rounded-2xl border border-gray-100 p-16 text-center">
           <div className="w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-5">
             <ClipboardList className="w-7 h-7 text-gray-400" />
@@ -227,7 +290,7 @@ export default function GestionSolicitudes() {
       )}
 
       {/* Sección: con conflicto */}
-      {!loading && hayConflictos && (
+      {!loading && !fetchError && hayConflictos && (
         <div className="mb-8">
           <div className="flex items-center gap-2 mb-3">
             <AlertCircle className="w-4 h-4 text-amber-500" />
@@ -252,7 +315,7 @@ export default function GestionSolicitudes() {
       )}
 
       {/* Sección: sin conflicto */}
-      {!loading && sinConflicto.length > 0 && (
+      {!loading && !fetchError && sinConflicto.length > 0 && (
         <div>
           {hayConflictos && (
             <h3 className="text-sm font-semibold text-gray-500 mb-3">Otras solicitudes</h3>
