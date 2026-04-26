@@ -1,9 +1,18 @@
 const express = require('express');
-const router = express.Router();
-const { crearReserva, obtenerReservasPorUsuario } = require('../controllers/reservaController');
+const router  = express.Router();
+const verifyToken = require('../middleware/verifyToken');
+const {
+  crearReserva,
+  obtenerEventosCalendario,
+  obtenerReservasPorUsuario,
+  obtenerReservasPendientes,
+  gestionarReserva,
+} = require('../controllers/reservaController');
 
-// Rutas
-router.post('/', crearReserva);                   // Para hacer la reserva
-router.get('/usuario/:id_usuario', obtenerReservasPorUsuario); // Para ver las reservas de un usuario
+router.post('/crear',                  verifyToken, crearReserva);
+router.get('/calendario',              verifyToken, obtenerEventosCalendario);
+router.get('/pendientes',              verifyToken, obtenerReservasPendientes);
+router.get('/usuario/:id_usuario',     verifyToken, obtenerReservasPorUsuario);
+router.post('/gestionar/:id_reserva',  verifyToken, gestionarReserva);
 
 module.exports = router;

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -11,37 +12,39 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
 
 const handleLogin = async (e) => {
-    e.preventDefault();
-    setError('');
-    setLoading(true);
+  e.preventDefault();
+  setError('');
+  setLoading(true);
 
-    try {
-      const response = await fetch('http://localhost:4000/api/auth/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          correo: username, 
-          password: password,
-        }),
-      });
+  try {
+    const url = 'http://localhost:4000/api/auth/login';
+    console.log('🔵 Llamando a:', url);
+    
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ correo: username, password: password }),
+    });
 
-      const data = await response.json();
+    console.log('🟡 Status:', response.status, response.ok);
+    const data = await response.json();
+    console.log('🟢 Data:', data);
 
-      if (response.ok && data.token) {
-        localStorage.setItem('token', data.token);
-        localStorage.setItem('user', JSON.stringify(data.usuario));
-        navigate('/dashboard');
-      } else {
-        setError(data.mensaje || 'Usuario o contraseña incorrectos');
-      }
-    } catch (err) {
-      setError('No hay conexión con el servidor. Revisa la terminal del puerto 4000.');
-    } finally {
-      setLoading(false);
+    if (response.ok && data.token) {
+      localStorage.setItem('token', data.token);
+      localStorage.setItem('user', JSON.stringify(data.usuario));
+      console.log('✅ Token guardado:', data.token.substring(0, 20));
+      navigate('/dashboard');
+    } else {
+      setError(data.mensaje || 'Error al iniciar sesión');
     }
-  };
+  } catch (err) {
+    console.error('❌ Error:', err);
+    setError('No hay conexión con el servidor.');
+  } finally {
+    setLoading(false);
+  }
+};
 
   return (
     <div className="flex min-h-screen w-full font-sans">
@@ -185,8 +188,8 @@ const handleLogin = async (e) => {
           </form>
 
           <div className="mt-4 text-sm text-gray-600 text-center">
-            <p>¿No tienes una cuenta? <a href="#" className="text-black hover:underline">Regístrate aquí</a></p>
-          </div>
+  <p>¿No tienes una cuenta? <Link to="/registro" className="text-black font-semibold hover:underline">Regístrate aquí</Link></p>
+</div>
         </div>
       </div>
     </div>

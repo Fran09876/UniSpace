@@ -1,13 +1,20 @@
+// models/Reserva.js
 const { DataTypes } = require('sequelize');
 const sequelize = require('../database');
-const Usuario = require('./Usuario');
-const Recurso = require('./Recurso');
 
 const Reserva = sequelize.define('Reserva', {
   id_reserva: {
     type: DataTypes.UUID,
     defaultValue: DataTypes.UUIDV4,
     primaryKey: true,
+  },
+  id_usuario: {
+    type: DataTypes.UUID,   // FK → usuarios.id_usuario (UUID)
+    allowNull: false,
+  },
+  id_recurso: {
+    type: DataTypes.UUID,   // FK → recursos.id_recurso (UUID)
+    allowNull: false,
   },
   fecha: {
     type: DataTypes.DATEONLY,
@@ -23,18 +30,16 @@ const Reserva = sequelize.define('Reserva', {
   },
   proposito: {
     type: DataTypes.TEXT,
+    allowNull: false,
   },
   estado: {
     type: DataTypes.ENUM('pendiente', 'confirmada', 'cancelada'),
     defaultValue: 'pendiente',
-  }
+  },
 }, {
   tableName: 'reservas',
   timestamps: true,
+  underscored: false,
 });
-
-// Establecer las relaciones (Llaves Foráneas)
-Reserva.belongsTo(Usuario, { foreignKey: 'id_usuario' });
-Reserva.belongsTo(Recurso, { foreignKey: 'id_recurso' });
 
 module.exports = Reserva;

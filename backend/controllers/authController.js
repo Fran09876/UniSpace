@@ -1,71 +1,70 @@
-const bcrypt = require('bcrypt');
-const jwt = require('jsonwebtoken');
+// controllers/authController.js
+const bcrypt  = require('bcrypt');
+const jwt     = require('jsonwebtoken');
 const Usuario = require('../models/Usuario');
 
-// Controlador para registrar un nuevo usuario
+// POST /api/auth/registro
 const registrarUsuario = async (req, res) => {
   try {
     const { nombre_completo, correo, password, rol } = req.body;
 
-    // Verificar si el correo ya existe
     const usuarioExistente = await Usuario.findOne({ where: { correo } });
     if (usuarioExistente) {
       return res.status(400).json({ mensaje: 'El correo ya está registrado.' });
     }
 
-    // Encriptar la contraseña (hashing)
-    const salt = await bcrypt.genSalt(10);
+    const salt          = await bcrypt.genSalt(10);
     const password_hash = await bcrypt.hash(password, salt);
 
-    // Guardar el usuario en PostgreSQL
     const nuevoUsuario = await Usuario.create({
       nombre_completo,
       correo,
       password_hash,
-      rol: rol || 'estudiante'
+      rol: rol || 'estudiante',
     });
 
-    res.status(201).json({ mensaje: 'Usuario registrado exitosamente', id: nuevoUsuario.id_usuario });
+    res.status(201).json({
+      mensaje: 'Usuario registrado exitosamente',
+      id: nuevoUsuario.id_usuario,   // UUID
+    });
   } catch (error) {
     console.error(error);
     res.status(500).json({ mensaje: 'Error en el servidor al registrar usuario.' });
   }
 };
 
-// Controlador para el Login
+// POST /api/auth/login
 const loginUsuario = async (req, res) => {
   try {
     const { correo, password } = req.body;
-    console.log("👉 Intento de Login recibido. Correo:", correo, " | Pass:", password);
-    // Buscar al usuario
+    console.log('👉 Intento de Login. Correo:', correo);
+
     const usuario = await Usuario.findOne({ where: { correo } });
     if (!usuario) {
       return res.status(404).json({ mensaje: 'Usuario no encontrado.' });
     }
 
-    // Comparar contraseñas
     const passwordValida = await bcrypt.compare(password, usuario.password_hash);
     if (!passwordValida) {
       return res.status(401).json({ mensaje: 'Contraseña incorrecta.' });
     }
 
-    // Generar el Token JWT
+    // IMPORTANTE: el payload incluye id_usuario (UUID) con la clave "id"
+    // para que req.user.id esté disponible en los middlewares.
     const token = jwt.sign(
       { id: usuario.id_usuario, rol: usuario.rol },
       process.env.JWT_SECRET,
-      { expiresIn: '8h' } // El token expira en 8 horas
+      { expiresIn: '8h' }
     );
 
-    // Devolvemos el token que Sabas guardará en el localStorage
-    // Devolvemos el token que Sabas guardará en el localStorage
-    res.json({ 
-      mensaje: 'Login exitoso', 
-      token, 
-      usuario: { 
-        id: usuario.id_usuario,
-        nombre: usuario.nombre_completo, 
-        rol: usuario.rol 
-      } 
+    res.json({
+      mensaje: 'Login exitoso',
+      token,
+      usuario: {
+        id:     usuario.id_usuario,   // UUID — el frontend lo guarda en localStorage
+        nombre: usuario.nombre_completo,
+        rol:    usuario.rol,
+      },
     });
   } catch (error) {
     console.error(error);

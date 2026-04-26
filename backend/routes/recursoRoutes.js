@@ -1,9 +1,18 @@
 const express = require('express');
-const router = express.Router();
-const { crearRecurso, obtenerRecursos } = require('../controllers/recursoController');
+const router  = express.Router();
+const verifyToken = require('../middleware/verifyToken');
+const {
+  obtenerRecursos,
+  obtenerRecurso,
+  crearRecurso,
+  actualizarRecurso,
+  eliminarRecurso,
+} = require('../controllers/recursoController');
 
-// Rutas
-router.post('/', crearRecurso);       // Para crear (POST)
-router.get('/', obtenerRecursos);     // Para leer (GET)
+router.get('/',     verifyToken, obtenerRecursos);
+router.get('/:id',  verifyToken, obtenerRecurso);
+router.post('/',    verifyToken, crearRecurso);
+router.put('/:id',  verifyToken, actualizarRecurso);
+router.delete('/:id', verifyToken, eliminarRecurso);
 
 module.exports = router;
