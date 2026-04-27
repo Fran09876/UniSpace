@@ -8,6 +8,21 @@ const registrarUsuario = async (req, res) => {
   try {
     const { nombre_completo, correo, password, rol } = req.body;
 
+    const regexCorreo = /^(C?\d{8})@itoaxaca\.edu\.mx$/;
+
+  if (!regexCorreo.test(correo)) {
+    return res.status(400).json({
+      mensaje: 'Correo institucional inválido'
+    });
+  }
+
+    const regexPassword = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
+
+if (!regexPassword.test(password)) {
+  return res.status(400).json({
+    mensaje: 'La contraseña debe tener mínimo 8 caracteres, una mayúscula, una minúscula y un número'
+  });
+}
     const usuarioExistente = await Usuario.findOne({ where: { correo } });
     if (usuarioExistente) {
       return res.status(400).json({ mensaje: 'El correo ya está registrado.' });

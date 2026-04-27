@@ -1,4 +1,3 @@
-// src/utils/api.js
 const BASE_URL = 'http://localhost:4000/api';
 
 async function apiFetch(endpoint, options = {}) {
@@ -11,8 +10,6 @@ async function apiFetch(endpoint, options = {}) {
 
   const res = await fetch(`${BASE_URL}${endpoint}`, { ...options, headers });
 
-  // Solo limpiar sesión en 401 (token inválido) o 403 (sin permisos)
-  // 404 NO debe limpiar sesión — es un error de ruta, no de autenticación
   if (res.status === 401 || res.status === 403) {
     localStorage.clear();
     window.location.replace('/');

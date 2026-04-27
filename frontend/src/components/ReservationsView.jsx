@@ -1,12 +1,10 @@
-// ReservationsView.jsx  —  versión corregida
-// Cambios: usa `api` utility (con JWT automático) en lugar de fetch directo.
 import React, { useState, useEffect } from 'react';
 import {
   Calendar, Clock, MapPin,
   CheckCircle, Clock3, XCircle,
   RefreshCw, BookMarked,
 } from 'lucide-react';
-import { api } from '../utils/api';   // ← CORREGIDO: centralizado con JWT
+import { api } from '../utils/api';   
 
 const STATUS_CONFIG = {
   confirmada: {
@@ -73,8 +71,6 @@ export default function ReservationsView({ onNavigate }) {
 
   const formatDate = (isoDate) => {
     if (!isoDate) return '—';
-    // DATEONLY viene como "YYYY-MM-DD" — parseamos sin new Date() para evitar
-    // el desfase de un día por UTC.
     const [y, m, d] = String(isoDate).substring(0, 10).split('-');
     return new Date(Number(y), Number(m) - 1, Number(d)).toLocaleDateString('es-MX', {
       year: 'numeric', month: 'long', day: 'numeric',
