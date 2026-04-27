@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Link } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
+import { GoogleLogin, GoogleOAuthProvider } from '@react-oauth/google';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -11,40 +11,69 @@ export default function Login() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-const handleLogin = async (e) => {
-  e.preventDefault();
-  setError('');
-  setLoading(true);
+  // LOGIN NORMAL
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
 
-  try {
-    const url = 'http://localhost:4000/api/auth/login';
-    console.log('🔵 Llamando a:', url);
-    
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ correo: username, password: password }),
-    });
+    try {
+      const url = 'http://localhost:4000/api/auth/login';
+      console.log('🔵 Llamando a:', url);
+      
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ correo: username, password: password }),
+      });
 
-    console.log('🟡 Status:', response.status, response.ok);
-    const data = await response.json();
-    console.log('🟢 Data:', data);
+      console.log('🟡 Status:', response.status, response.ok);
+      const data = await response.json();
+      console.log('🟢 Data:', data);
 
-    if (response.ok && data.token) {
-      localStorage.setItem('token', data.token);
-      localStorage.setItem('user', JSON.stringify(data.usuario));
-      console.log('✅ Token guardado:', data.token.substring(0, 20));
-      navigate('/dashboard');
-    } else {
-      setError(data.mensaje || 'Error al iniciar sesión');
+      if (response.ok && data.token) {
+        localStorage.setItem('token', data.token);
+        localStorage.setItem('user', JSON.stringify(data.usuario));
+        console.log('✅ Token guardado:', data.token.substring(0, 20));
+        navigate('/dashboard');
+      } else {
+        setError(data.mensaje || 'Error al iniciar sesión');
+      }
+    } catch (err) {
+      console.error('❌ Error:', err);
+      setError('No hay conexión con el servidor.');
+    } finally {
+      setLoading(false);
     }
-  } catch (err) {
-    console.error('❌ Error:', err);
-    setError('No hay conexión con el servidor.');
-  } finally {
-    setLoading(false);
-  }
-};
+  };
+
+  // LOGIN CON GOOGLE
+  const handleGoogleSuccess = async (credentialResponse) => {
+    try {
+      console.log('🔵 Iniciando autenticación con Google...');
+      const response = await fetch('http://localhost:4000/api/auth/google', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          token: credentialResponse.credential,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.token) {
+        localStorage.setItem('token', data.token);
+        localStorage.setItem('user', JSON.stringify(data.usuario));
+        console.log('✅ Auth Google exitosa');
+        navigate('/dashboard');
+      } else {
+        setError(data.mensaje || 'Error al autenticar con Google');
+      }
+    } catch (err) {
+      console.error('❌ Error Google:', err);
+      setError('Error al conectar con el servidor de autenticación');
+    }
+  };
 
   return (
     <div className="flex min-h-screen w-full font-sans">
@@ -128,16 +157,18 @@ const handleLogin = async (e) => {
           <h1 className="text-3xl font-semibold mb-2 text-black text-center">¡Bienvenido!</h1>
           <p className="text-sm text-gray-500 text-center mb-6">Ingresa tus credenciales para gestionar tus espacios</p>
 
-          <div className="flex flex-col sm:flex-row items-center gap-2 mb-4">
-            <button type="button" className="w-full flex justify-center items-center gap-2 bg-white text-sm text-gray-600 p-2 rounded-md hover:bg-gray-50 border border-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-200 transition-colors duration-300">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" className="w-4 h-4">
-                <path fill="#fbbb00" d="M113.47 309.408 95.648 375.94l-65.139 1.378C11.042 341.211 0 299.9 0 256c0-42.451 10.324-82.483 28.624-117.732h.014L86.63 148.9l25.404 57.644c-5.317 15.501-8.215 32.141-8.215 49.456.002 18.792 3.406 36.797 9.651 53.408z" />
-                <path fill="#518ef8" d="M507.527 208.176C510.467 223.662 512 239.655 512 256c0 18.328-1.927 36.206-5.598 53.451-12.462 58.683-45.025 109.925-90.134 146.187l-.014-.014-73.044-3.727-10.338-64.535c29.932-17.554 53.324-45.025 65.646-77.911h-136.89V208.176h245.899z" />
-                <path fill="#28b446" d="m416.253 455.624.014.014C372.396 490.901 316.666 512 256 512c-97.491 0-182.252-54.491-225.491-134.681l82.961-67.91c21.619 57.698 77.278 98.771 142.53 98.771 28.047 0 54.323-7.582 76.87-20.818l83.383 68.262z" />
-                <path fill="#f14336" d="m419.404 58.936-82.933 67.896C313.136 112.246 285.552 103.82 256 103.82c-66.729 0-123.429 42.957-143.965 102.724l-83.397-68.276h-.014C71.23 56.123 157.06 0 256 0c62.115 0 119.068 22.126 163.404 58.936z" />
-              </svg>
-              Continuar con Google
-            </button>
+          {/* GOOGLE LOGIN REAL (ENVUELTO EN SU PROVIDER) */}
+          <div className="mb-4 flex justify-center">
+            <GoogleOAuthProvider clientId="250193403650-a45q0gkm35gs9pcmu80fhd3g55314kc1.apps.googleusercontent.com">
+              <GoogleLogin
+                onSuccess={handleGoogleSuccess}
+                onError={() => setError('Error al iniciar sesión con Google')}
+                useOneTap
+                theme="outline"
+                size="large"
+                width="100%"
+              />
+            </GoogleOAuthProvider>
           </div>
 
           <div className="my-4 text-sm text-gray-600 text-center">
@@ -188,8 +219,8 @@ const handleLogin = async (e) => {
           </form>
 
           <div className="mt-4 text-sm text-gray-600 text-center">
-  <p>¿No tienes una cuenta? <Link to="/registro" className="text-black font-semibold hover:underline">Regístrate aquí</Link></p>
-</div>
+            <p>¿No tienes una cuenta? <Link to="/registro" className="text-black font-semibold hover:underline">Regístrate aquí</Link></p>
+          </div>
         </div>
       </div>
     </div>

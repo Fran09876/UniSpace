@@ -3,12 +3,13 @@ import { useNavigate } from 'react-router-dom';
 import {
   Home, Calendar, BookMarked, LogOut,
   Menu, X, BellRing, CheckCircle, Clock,
-  MapPin, Building,
+  MapPin, Building, Users // <-- Ícono de Usuarios añadido
 } from 'lucide-react';
-import CalendarView       from './CalendarView';
+import CalendarView      from './CalendarView';
 import GestionSolicitudes from './GestionSolicitudes';
 import GestionRecursos    from './GestionRecursos';
 import ReservationsView   from './ReservationsView';
+import GestionUsuarios    from './GestionUsuarios'; // <-- Nueva vista importada
 import { api }            from '../utils/api';
 
 function InicioView({ onNavigate }) {
@@ -148,11 +149,12 @@ export default function DashboardLayout() {
 
   const navigation = [
     { id: 'inicio',           name: 'Inicio',              icon: Home       },
-    { id: 'calendario',       name: 'Calendario',           icon: Calendar   },
-    { id: 'reservas',         name: 'Mis Reservas',         icon: BookMarked },
+    { id: 'calendario',       name: 'Calendario',          icon: Calendar   },
+    { id: 'reservas',         name: 'Mis Reservas',        icon: BookMarked },
     ...(isAdmin ? [
       { id: 'gestion_admin',    name: 'Solicitudes',        icon: BellRing  },
       { id: 'gestion_recursos', name: 'Gestionar Espacios', icon: Building  },
+      { id: 'gestion_usuarios', name: 'Usuarios y Roles',   icon: Users     }, // <-- Nueva opción para Admin
     ] : []),
   ];
 
@@ -162,6 +164,7 @@ export default function DashboardLayout() {
     reservas:         'Mis Reservas',
     gestion_admin:    'Administración de Solicitudes',
     gestion_recursos: 'Gestión de Recursos',
+    gestion_usuarios: 'Gestión de Usuarios', // <-- Título de la nueva vista
   };
 
   const handleLogout = () => {
@@ -190,13 +193,10 @@ export default function DashboardLayout() {
       >
         <div className="h-20 flex items-center px-8 border-b border-gray-50 shrink-0">
 
-          {/* PUNTO PALPITANTE — animate-ping limpio, sin ícono duplicado */}
+          {/* PUNTO PALPITANTE */}
           <div className="relative mr-4 flex items-center justify-center w-10 h-10">
-            {/* Aro externo que hace ping */}
             <span className="absolute inline-flex h-full w-full rounded-full bg-black opacity-20 animate-ping" />
-            {/* Cuadro negro del logo */}
             <div className="relative w-10 h-10 bg-gray-900 rounded-xl flex items-center justify-center shadow-lg z-10">
-              {/* Punto blanco interno que pulsa */}
               <span className="h-3 w-3 bg-white rounded-full animate-pulse" />
             </div>
           </div>
@@ -264,11 +264,12 @@ export default function DashboardLayout() {
         <main className="flex-1 overflow-y-auto p-5 sm:p-10 scroll-smooth">
           <div className="max-w-6xl mx-auto">
             {view === 'inicio'           && <InicioView onNavigate={setView} />}
-            {/* FIX: Se pasa isSidebarOpen para que CalendarView pueda forzar updateSize() */}
             {view === 'calendario'       && <CalendarView isSidebarOpen={isSidebarOpen} />}
             {view === 'reservas'         && <ReservationsView onNavigate={setView} />}
             {view === 'gestion_admin'    && <GestionSolicitudes />}
             {view === 'gestion_recursos' && <GestionRecursos />}
+            {/* <-- Renderizado de la nueva vista de usuarios --> */}
+            {view === 'gestion_usuarios' && <GestionUsuarios />} 
           </div>
         </main>
       </div>

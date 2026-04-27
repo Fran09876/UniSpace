@@ -1,4 +1,3 @@
-// models/Usuario.js
 const { DataTypes } = require('sequelize');
 const sequelize = require('../database');
 
@@ -19,7 +18,7 @@ const Usuario = sequelize.define('Usuario', {
   },
   password_hash: {
     type: DataTypes.STRING(255),
-    allowNull: false,
+    allowNull: true, // Cambiado a true para soportar login social
   },
   rol: {
     type: DataTypes.ENUM('estudiante', 'docente', 'admin'),
