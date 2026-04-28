@@ -329,6 +329,12 @@ export default function CalendarView({ isSidebarOpen }) {
         events={eventos}
         slotMinTime="07:00:00"
         slotMaxTime="21:00:00"
+        
+        // --- AQUÍ ESTÁ LA MAGIA PARA LOS MÓDULOS DE 1 HORA ---
+        slotDuration="01:00:00" 
+        slotLabelInterval="01:00"
+        // ----------------------------------------------------
+        
         allDaySlot={false}
         height="auto"
         locale="es"
