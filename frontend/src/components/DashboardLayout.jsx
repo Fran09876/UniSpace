@@ -29,40 +29,55 @@ function InicioView({ onNavigate }) {
 
     const loadStats = async () => {
       try {
+        // 1. REGLA DE NEGOCIO: ¿A qué endpoint le preguntamos?
+        const endpointReservas = user.rol === 'admin' 
+          ? '/reservas/calendario' 
+          : `/reservas/usuario/${user.id}`;
+
         const [resReservas, resRecursos] = await Promise.all([
-          api.get(`/reservas/usuario/${user.id}`),
+          api.get(endpointReservas),
           api.get('/recursos'),
         ]);
 
         const reservas = resReservas.ok ? await resReservas.json() : [];
         const recursos  = resRecursos.ok ? await resRecursos.json()  : [];
 
-        const activas = reservas.filter(
-          (r) => r.estado === 'confirmada' || r.estado === 'pendiente'
-        ).length;
+        // 2. Filtramos entendiendo ambos formatos (el de usuario normal y el de calendario)
+        const activas = reservas.filter((r) => {
+          const estado = r.estado || r.extendedProps?.estado;
+          return estado === 'confirmada' || estado === 'pendiente';
+        }).length;
 
         const hoy = new Date();
         hoy.setHours(0, 0, 0, 0);
 
         const proxima = reservas
           .filter((r) => {
-            if (r.estado === 'cancelada') return false;
-            const [y, m, d] = String(r.fecha).substring(0, 10).split('-');
+            const estado = r.estado || r.extendedProps?.estado;
+            if (estado === 'cancelada') return false;
+            
+            // Extraemos la fecha sin importar qué endpoint la mandó
+            const fechaStr = r.fecha || (r.start ? r.start.split('T')[0] : '');
+            if (!fechaStr) return false;
+
+            const [y, m, d] = String(fechaStr).substring(0, 10).split('-');
             return new Date(Number(y), Number(m) - 1, Number(d)) >= hoy;
           })
           .sort((a, b) => {
-            const fa = `${a.fecha}T${a.hora_inicio}`;
-            const fb = `${b.fecha}T${b.hora_inicio}`;
-            return fa.localeCompare(fb);
+            const fechaA = a.fecha ? `${a.fecha}T${a.hora_inicio}` : a.start;
+            const fechaB = b.fecha ? `${b.fecha}T${b.hora_inicio}` : b.start;
+            return fechaA.localeCompare(fechaB);
           })[0];
 
-        const proximaStr = proxima
-          ? (() => {
-              const [y, m, d] = String(proxima.fecha).substring(0, 10).split('-');
-              const fecha = new Date(Number(y), Number(m) - 1, Number(d));
-              return `${fecha.toLocaleDateString('es-MX', { month: 'short', day: 'numeric' })} ${String(proxima.hora_inicio).substring(0, 5)}`;
-            })()
-          : 'Sin pendientes';
+        let proximaStr = 'Sin pendientes';
+        if (proxima) {
+            const fechaStr = proxima.fecha || (proxima.start ? proxima.start.split('T')[0] : '');
+            const horaStr  = proxima.hora_inicio || (proxima.start ? proxima.start.split('T')[1].substring(0,5) : '');
+            
+            const [y, m, d] = String(fechaStr).substring(0, 10).split('-');
+            const fechaObj = new Date(Number(y), Number(m) - 1, Number(d));
+            proximaStr = `${fechaObj.toLocaleDateString('es-MX', { month: 'short', day: 'numeric' })} ${String(horaStr).substring(0, 5)}`;
+        }
 
         const disponibles = recursos.filter((r) => r.estado === 'disponible').length;
 
@@ -87,7 +102,7 @@ function InicioView({ onNavigate }) {
     { label: 'Espacios disponibles', value: stats.espaciosDisponibles, icon: MapPin      },
   ];
 
-  return (
+ return (
     <div className="space-y-8 animate-in fade-in duration-500">
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
         {statCards.map((stat) => (
@@ -124,13 +139,13 @@ function InicioView({ onNavigate }) {
             onClick={() => onNavigate('calendario')}
             className="px-8 py-3.5 bg-gray-900 text-white font-semibold rounded-2xl hover:bg-black shadow-lg transition-colors"
           >
-            Nueva Reserva
+            {user.rol === 'admin' ? 'Ver Calendario' : 'Nueva Reserva'}
           </button>
           <button
             onClick={() => onNavigate('reservas')}
             className="px-8 py-3.5 bg-white text-gray-700 font-semibold rounded-2xl border border-gray-200 hover:bg-gray-50 transition-colors"
           >
-            Ver Mis Reservas
+            {user.rol === 'admin' ? 'Ver Reservas' : 'Ver Mis Reservas'}
           </button>
         </div>
       </div>
@@ -143,18 +158,18 @@ export default function DashboardLayout() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [view, setView] = useState('inicio');
 
-  const userData = JSON.parse(localStorage.getItem('user') || '{}');
+const userData = JSON.parse(localStorage.getItem('user') || '{}');
   const nombre   = userData.nombre || 'Usuario';
   const isAdmin  = userData.rol === 'admin';
 
   const navigation = [
     { id: 'inicio',           name: 'Inicio',              icon: Home       },
     { id: 'calendario',       name: 'Calendario',          icon: Calendar   },
-    { id: 'reservas',         name: 'Mis Reservas',        icon: BookMarked },
+    { id: 'reservas',         name: isAdmin ? 'Reservas' : 'Mis Reservas',  icon: BookMarked },
     ...(isAdmin ? [
       { id: 'gestion_admin',    name: 'Solicitudes',        icon: BellRing  },
       { id: 'gestion_recursos', name: 'Gestionar Espacios', icon: Building  },
-      { id: 'gestion_usuarios', name: 'Usuarios y Roles',   icon: Users     }, // <-- Nueva opción para Admin
+      { id: 'gestion_usuarios', name: 'Usuarios y Roles',   icon: Users     }, 
     ] : []),
   ];
 

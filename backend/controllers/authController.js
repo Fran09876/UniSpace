@@ -2,6 +2,7 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const Usuario = require('../models/Usuario');
 const { OAuth2Client } = require('google-auth-library');
+const emailService = require('../services/emailService');
 
 const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
@@ -51,10 +52,17 @@ const registrarUsuario = async (req, res) => {
 const loginUsuario = async (req, res) => {
   try {
     const { correo, password } = req.body;
-    console.log('👉 Intento de Login. Correo:', correo);
+    
+    // Limpiamos espacios fantasmas
+    const correoLimpio = correo.trim();
+    
+    console.log('\n🔍 --- DETECTIVE MODE: INICIANDO LOGIN ---');
+    console.log('1. Correo que React envió:', `"${correoLimpio}"`);
 
-    const usuario = await Usuario.findOne({ where: { correo } });
+    const usuario = await Usuario.findOne({ where: { correo: correoLimpio } });
+    
     if (!usuario) {
+      console.log('❌ RESULTADO: Usuario no encontrado en la BD.');
       return res.status(404).json({ mensaje: 'Usuario no encontrado.' });
     }
 
@@ -64,6 +72,7 @@ const loginUsuario = async (req, res) => {
 
     const passwordValida = await bcrypt.compare(password, usuario.password_hash);
     if (!passwordValida) {
+      console.log('❌ Contraseña incorrecta.');
       return res.status(401).json({ mensaje: 'Contraseña incorrecta.' });
     }
 
@@ -73,22 +82,19 @@ const loginUsuario = async (req, res) => {
       { expiresIn: '8h' }
     );
 
+    console.log('✅ RESULTADO: ¡Login exitoso!');
     res.json({
       mensaje: 'Login exitoso',
       token,
-      usuario: {
-        id: usuario.id_usuario,
-        nombre: usuario.nombre_completo,
-        rol: usuario.rol,
-      },
+      usuario: { id: usuario.id_usuario, nombre: usuario.nombre_completo, rol: usuario.rol },
     });
   } catch (error) {
-    console.error(error);
+    console.error('Error catastrófico en login:', error);
     res.status(500).json({ mensaje: 'Error en el servidor al iniciar sesión.' });
   }
 };
 
-// NUEVO: POST /api/auth/google
+// POST /api/auth/google
 const googleLogin = async (req, res) => {
   try {
     const { token: googleToken } = req.body;
@@ -101,7 +107,6 @@ const googleLogin = async (req, res) => {
     const payload = ticket.getPayload();
     const { email, name, sub } = payload;
 
-    // Validar que sea correo institucional si es necesario (opcional para Google)
     const regexCorreo = /^(C?\d{8})@itoaxaca\.edu\.mx$/;
     if (!regexCorreo.test(email)) {
         return res.status(400).json({ mensaje: 'Solo se permiten correos @itoaxaca.edu.mx' });
@@ -110,11 +115,10 @@ const googleLogin = async (req, res) => {
     let usuario = await Usuario.findOne({ where: { correo: email } });
 
     if (!usuario) {
-      // Registro automático si no existe
       usuario = await Usuario.create({
         nombre_completo: name,
         correo: email,
-        password_hash: null, // No hay contraseña para usuarios de Google
+        password_hash: null, 
         rol: 'estudiante',
       });
     }
@@ -140,11 +144,96 @@ const googleLogin = async (req, res) => {
   }
 };
 
-// GET /api/usuarios
+// --- NUEVAS FUNCIONES DE RECUPERACIÓN (Blindadas contra espacios y fechas nulas) ---
+
+// POST /api/auth/forgot-password
+const solicitarRecuperacion = async (req, res) => {
+  try {
+    const { correo } = req.body;
+    const correoLimpio = correo.trim();
+    
+    const usuario = await Usuario.findOne({ where: { correo: correoLimpio } });
+    if (!usuario) return res.status(404).json({ mensaje: 'Correo no registrado' });
+
+    const codigo = Math.floor(100000 + Math.random() * 900000).toString(); 
+    
+    usuario.reset_token = codigo;
+    usuario.reset_token_expires = new Date(Date.now() + 15 * 60 * 1000); 
+    await usuario.save();
+
+    console.log(`\n💾 --- CÓDIGO GENERADO ---`);
+    console.log(`Se guardó el código "${codigo}" para el correo: ${correoLimpio}`);
+
+    await emailService.enviarCorreoRecuperacion(correoLimpio, codigo);
+    res.json({ mensaje: 'Código enviado a tu correo institucional' });
+  } catch (error) {
+    console.error('Error al solicitar recuperación:', error);
+    res.status(500).json({ mensaje: 'Error al enviar el correo' });
+  }
+};
+
+// POST /api/auth/reset-password
+const restablecerPassword = async (req, res) => {
+  try {
+    const correo = req.body.correo.trim();
+    const codigo = req.body.codigo.trim(); 
+    const nuevoPassword = req.body.nuevoPassword;
+
+    console.log('\n🕵️‍♂️ --- DETECTIVE MODE: VALIDANDO CÓDIGO ---');
+    console.log(`1. React envió -> Correo: "${correo}", Código: "${codigo}"`);
+
+    const usuarioEnBD = await Usuario.findOne({ where: { correo } });
+
+    if (!usuarioEnBD) {
+      console.log('❌ 2. El correo no existe en la base de datos.');
+      return res.status(400).json({ mensaje: 'Código inválido o expirado' });
+    }
+
+    console.log(`2. Datos guardados en la BD para este correo:`);
+    console.log(`   - Código en BD: "${usuarioEnBD.reset_token}"`);
+    console.log(`   - Expiración en BD: ${usuarioEnBD.reset_token_expires}`);
+    console.log(`   - Fecha Actual: ${new Date()}`);
+
+    if (usuarioEnBD.reset_token !== codigo) {
+      console.log('❌ 3. Los códigos NO coinciden.');
+      return res.status(400).json({ mensaje: 'Código inválido o expirado' });
+    }
+
+    if (!usuarioEnBD.reset_token_expires || usuarioEnBD.reset_token_expires < new Date()) {
+      console.log('❌ 3. El código ha expirado o la fecha se guardó como nula.');
+      return res.status(400).json({ mensaje: 'Código inválido o expirado' });
+    }
+
+    console.log('✅ 3. El código es CORRECTO y está VIGENTE.');
+
+    const regexPassword = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
+    if (!regexPassword.test(nuevoPassword)) {
+      console.log('❌ 4. La nueva contraseña no cumple los requisitos.');
+      return res.status(400).json({
+        mensaje: 'La contraseña debe tener mínimo 8 caracteres, una mayúscula, una minúscula y un número'
+      });
+    }
+
+    usuarioEnBD.password_hash = await bcrypt.hash(nuevoPassword, 10);
+    usuarioEnBD.reset_token = null;
+    usuarioEnBD.reset_token_expires = null;
+    await usuarioEnBD.save();
+
+    console.log('✅ 4. ¡Contraseña cambiada con éxito!');
+    res.json({ mensaje: 'Contraseña actualizada correctamente' });
+  } catch (error) {
+    console.error('Error al restablecer contraseña:', error);
+    res.status(500).json({ mensaje: 'Error al actualizar la contraseña' });
+  }
+};
+
+// --- FUNCIONES DE GESTIÓN DE USUARIOS ---
+
+// GET /api/auth/usuarios
 const obtenerUsuarios = async (req, res) => {
   try {
     const usuarios = await Usuario.findAll({
-      attributes: ['id_usuario', 'nombre_completo', 'correo', 'rol'], // Excluimos la contraseña
+      attributes: ['id_usuario', 'nombre_completo', 'correo', 'rol'],
       order: [['nombre_completo', 'ASC']]
     });
     res.json(usuarios);
@@ -154,7 +243,7 @@ const obtenerUsuarios = async (req, res) => {
   }
 };
 
-// PUT /api/usuarios/:id/rol
+// PUT /api/auth/usuarios/:id/rol
 const cambiarRol = async (req, res) => {
   try {
     const { id } = req.params;
@@ -175,11 +264,12 @@ const cambiarRol = async (req, res) => {
   }
 };
 
-// Asegúrate de exportar todas las funciones nuevas
 module.exports = { 
   registrarUsuario, 
   loginUsuario, 
   googleLogin, 
   obtenerUsuarios, 
-  cambiarRol 
+  cambiarRol,
+  solicitarRecuperacion,
+  restablecerPassword
 };

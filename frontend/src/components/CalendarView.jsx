@@ -241,6 +241,7 @@ export default function CalendarView({ isSidebarOpen }) {
   };
 
   const handleDateSelect = (info) => {
+    if (user.rol === 'admin') return; 
     if (info.allDay) return;
     setTooltip({ event: null, position: { x: 0, y: 0 } });
     setSelectInfo(info);
@@ -322,18 +323,17 @@ export default function CalendarView({ isSidebarOpen }) {
         initialView="timeGridWeek"
         headerToolbar={{ left: 'prev,next today', center: 'title', right: 'timeGridWeek,timeGridDay' }}
         buttonText={{ today: 'Hoy', week: 'Semana', day: 'Día' }}
-        selectable
-        selectMirror
+        selectable={user.rol !== 'admin'} 
+        selectMirror={user.rol !== 'admin'}
         select={handleDateSelect}
+        selectMirror
         eventClick={handleEventClick}
         events={eventos}
         slotMinTime="07:00:00"
         slotMaxTime="21:00:00"
         
-        // --- AQUÍ ESTÁ LA MAGIA PARA LOS MÓDULOS DE 1 HORA ---
         slotDuration="01:00:00" 
         slotLabelInterval="01:00"
-        // ----------------------------------------------------
         
         allDaySlot={false}
         height="auto"

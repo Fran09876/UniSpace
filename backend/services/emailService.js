@@ -44,4 +44,26 @@ const enviarCorreoReserva = async ({ to, nombre, estado, reserva }) => {
   }
 };
 
-module.exports = { enviarCorreoReserva };
+  const enviarCorreoRecuperacion = async (correo, codigo) => {
+    const mailOptions = {
+      from: process.env.EMAIL_USER,
+      to: correo,
+      subject: 'Código de recuperación - UniSpace',
+      html: `
+        <div style="font-family: sans-serif; max-width: 400px; margin: auto; border: 1px solid #eee; padding: 20px; border-radius: 15px;">
+          <h2 style="color: #111; text-align: center;">Recuperación de Cuenta</h2>
+          <p style="color: #555;">Has solicitado restablecer tu contraseña. Usa el siguiente código:</p>
+          <div style="background: #f4f4f4; padding: 15px; text-align: center; border-radius: 10px;">
+            <span style="font-size: 24px; font-bold; letter-spacing: 5px; color: #000;">${codigo}</span>
+          </div>
+          <p style="color: #999; font-size: 12px; margin-top: 20px;">Este código expirará en 15 minutos.</p>
+        </div>
+      `
+    };
+    return transporter.sendMail(mailOptions);
+  };
+
+module.exports = {
+  enviarCorreoReserva,
+  enviarCorreoRecuperacion
+};

@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { GoogleLogin, GoogleOAuthProvider } from '@react-oauth/google';
+import { api } from '../utils/api'; // <-- ¡Añadimos la importación de la API!
+
 
 export default function Login() {
   const navigate = useNavigate();
@@ -11,6 +13,12 @@ export default function Login() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
+  // Datos para la recuperación
+  const [emailRecuperacion, setEmailRecuperacion] = useState("");
+  const [codigo, setCodigo] = useState("");
+  const [nuevoPassword, setNuevoPassword] = useState("");
+  const [view, setView] = useState('login');
+
   // LOGIN NORMAL
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -19,28 +27,22 @@ export default function Login() {
 
     try {
       const url = 'http://localhost:4000/api/auth/login';
-      console.log('🔵 Llamando a:', url);
-      
       const response = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ correo: username, password: password }),
       });
 
-      console.log('🟡 Status:', response.status, response.ok);
       const data = await response.json();
-      console.log('🟢 Data:', data);
 
       if (response.ok && data.token) {
         localStorage.setItem('token', data.token);
         localStorage.setItem('user', JSON.stringify(data.usuario));
-        console.log('✅ Token guardado:', data.token.substring(0, 20));
         navigate('/dashboard');
       } else {
         setError(data.mensaje || 'Error al iniciar sesión');
       }
     } catch (err) {
-      console.error('❌ Error:', err);
       setError('No hay conexión con el servidor.');
     } finally {
       setLoading(false);
@@ -50,13 +52,10 @@ export default function Login() {
   // LOGIN CON GOOGLE
   const handleGoogleSuccess = async (credentialResponse) => {
     try {
-      console.log('🔵 Iniciando autenticación con Google...');
       const response = await fetch('http://localhost:4000/api/auth/google', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          token: credentialResponse.credential,
-        }),
+        body: JSON.stringify({ token: credentialResponse.credential }),
       });
 
       const data = await response.json();
@@ -64,14 +63,56 @@ export default function Login() {
       if (response.ok && data.token) {
         localStorage.setItem('token', data.token);
         localStorage.setItem('user', JSON.stringify(data.usuario));
-        console.log('✅ Auth Google exitosa');
         navigate('/dashboard');
       } else {
         setError(data.mensaje || 'Error al autenticar con Google');
       }
     } catch (err) {
-      console.error('❌ Error Google:', err);
       setError('Error al conectar con el servidor de autenticación');
+    }
+  };
+
+  // PASO 1: Enviar el correo con el código
+  const handleSolicitarCodigo = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+    try {
+      const res = await api.post("/auth/forgot-password", { correo: emailRecuperacion });
+      if (res.ok) {
+        setError("✅ Código enviado a tu correo institucional");
+        setView('reset'); // Cambia a la vista para meter el código
+      } else {
+        const data = await res.json();
+        setError(data.mensaje || "Error al enviar el código");
+      }
+    } catch {
+      setError("Error al conectar con el servidor");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // PASO 2: Validar código y cambiar contraseña
+  const handleRestablecer = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+    try {
+      const res = await api.post("/auth/reset-password", { 
+        correo: emailRecuperacion, codigo, nuevoPassword 
+      });
+      if (res.ok) {
+        setError("✅ ¡Contraseña actualizada! Ya puedes iniciar sesión");
+        setView('login'); // Regresa al login para entrar con la nueva clave
+      } else {
+        const data = await res.json();
+        setError(data.mensaje || "Código incorrecto o expirado");
+      }
+    } catch {
+      setError("Error al conectar con el servidor");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -154,73 +195,117 @@ export default function Login() {
       {/* Right Pane - Form */}
       <div className="w-full lg:w-1/2 flex items-center justify-center bg-white px-6 py-12">
         <div className="max-w-md w-full">
-          <h1 className="text-3xl font-semibold mb-2 text-black text-center">¡Bienvenido!</h1>
-          <p className="text-sm text-gray-500 text-center mb-6">Ingresa tus credenciales para gestionar tus espacios</p>
+          <h1 className="text-3xl font-semibold mb-2 text-black text-center">¡Bienvenido a UniSpace!</h1>
+          {view === 'login' && <p className="text-sm text-gray-500 text-center mb-6">Ingresa tus credenciales para gestionar tus espacios</p>}
 
-          {/* GOOGLE LOGIN REAL (ENVUELTO EN SU PROVIDER) */}
-          <div className="mb-4 flex justify-center">
-            <GoogleOAuthProvider clientId="250193403650-a45q0gkm35gs9pcmu80fhd3g55314kc1.apps.googleusercontent.com">
-              <GoogleLogin
-                onSuccess={handleGoogleSuccess}
-                onError={() => setError('Error al iniciar sesión con Google')}
-                useOneTap
-                theme="outline"
-                size="large"
-                width="100%"
-              />
-            </GoogleOAuthProvider>
-          </div>
+{/* GOOGLE LOGIN REAL */}
+          {view === 'login' && (
+            <>
+              <div className="mb-4 flex justify-center">
+                <GoogleOAuthProvider clientId="250193403650-a45q0gkm35gs9pcmu80fhd3g55314kc1.apps.googleusercontent.com">
+                  <GoogleLogin
+                    onSuccess={handleGoogleSuccess}
+                    onError={() => setError('Error al iniciar sesión con Google')}
+                    useOneTap
+                    theme="outline"
+                    size="large"
+                    width="100%"
+                  />
+                </GoogleOAuthProvider>
+              </div>
 
-          <div className="my-4 text-sm text-gray-600 text-center">
-            <p>o con email</p>
-          </div>
-
-          {/* MENSAJE DE ERROR */}
+              <div className="my-4 text-sm text-gray-600 text-center">
+                <p>o con email institucional</p>
+              </div>
+            </>
+          )}
+          {/* MENSAJE DE ERROR / ÉXITO */}
           {error && (
-            <div className="mb-4 text-sm text-red-600 bg-red-50 p-2 rounded border border-red-200 text-center">
+            <div className={`mb-4 text-sm p-3 rounded-xl border text-center font-medium ${
+              error.includes('✅') ? 'bg-green-50 text-green-700 border-green-200' : 'text-red-600 bg-red-50 border-red-200'
+            }`}>
               {error}
             </div>
           )}
 
-          <form onSubmit={handleLogin} className="space-y-4">
-            <div>
-              <label htmlFor="username" className="block text-sm font-medium text-gray-700">Nombre de usuario</label>
-              <input 
-                type="text" 
-                id="username" 
-                name="username" 
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                required
-                className="mt-1 p-2 w-full border rounded-md focus:border-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-300 transition-colors duration-300" 
-              />
-            </div>
-            <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700">Contraseña</label>
-              <input 
-                type="password" 
-                id="password" 
-                name="password" 
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                className="mt-1 p-2 w-full border rounded-md focus:border-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-300 transition-colors duration-300" 
-              />
-            </div>
-            <div>
-              <button 
-                type="submit" 
-                disabled={loading}
-                className={`w-full bg-black text-white p-2 rounded-md hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-900 transition-colors duration-300 ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
-              >
-                {loading ? 'Validando...' : 'Iniciar sesión'}
-              </button>
-            </div>
-          </form>
+          {/* VISTA 1: LOGIN */}
+          {view === 'login' && (
+            <>
+              <form onSubmit={handleLogin} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Nombre de usuario o Correo</label>
+                  <input 
+                    type="text" value={username} onChange={(e) => setUsername(e.target.value)} required
+                    className="mt-1 p-2.5 w-full border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-900 transition-colors" 
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Contraseña</label>
+                  <input 
+                    type="password" value={password} onChange={(e) => setPassword(e.target.value)} required
+                    className="mt-1 p-2.5 w-full border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-900 transition-colors" 
+                  />
+                </div>
+                <div>
+                  <button type="submit" disabled={loading}
+                    className="w-full bg-gray-900 text-white p-3 rounded-xl font-bold hover:bg-black transition-colors disabled:opacity-50"
+                  >
+                    {loading ? 'Validando...' : 'Iniciar sesión'}
+                  </button>
+                </div>
+              </form>
+              <div className="flex justify-center mt-6">
+                <button type="button" onClick={() => { setView('request'); setError(''); }}
+                  className="text-sm font-bold text-gray-500 hover:text-gray-900 transition-colors"
+                >
+                  ¿Olvidaste tu contraseña?
+                </button>
+              </div>
+            </>
+          )}
 
-          <div className="mt-4 text-sm text-gray-600 text-center">
-            <p>¿No tienes una cuenta? <Link to="/registro" className="text-black font-semibold hover:underline">Regístrate aquí</Link></p>
-          </div>
+          {/* VISTA 2: PEDIR CÓDIGO */}
+          {view === 'request' && (
+            <form onSubmit={handleSolicitarCodigo} className="space-y-4">
+              <p className="text-sm text-gray-600 mb-4 text-center">Te enviaremos un código de recuperación a tu correo institucional.</p>
+              <input required type="email" name="email_recuperacion_unispace" autoComplete="off" placeholder="Tu correo institucional"
+                className="p-2.5 w-full border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-900 transition-colors"
+                value={emailRecuperacion} onChange={(e) => setEmailRecuperacion(e.target.value)} 
+              />
+              <button type="submit" disabled={loading}
+                className="w-full bg-gray-900 text-white p-3 rounded-xl font-bold hover:bg-black transition-colors disabled:opacity-50"
+              >
+                {loading ? 'Enviando...' : 'Enviar Código'}
+              </button>
+              <div className="flex justify-center mt-4">
+                <button type="button" onClick={() => { setView('login'); setError(''); }}
+                  className="text-sm font-bold text-gray-500 hover:text-gray-900 transition-colors"
+                >
+                  Volver al inicio de sesión
+                </button>
+              </div>
+            </form>
+          )}
+
+          {/* VISTA 3: RESETEAR CLAVE */}
+          {view === 'reset' && (
+            <form onSubmit={handleRestablecer} className="space-y-4">
+              <input required type="text" name="codigo_seguridad_v1" maxLength="6" autoComplete="one-time-code" placeholder="Código de 6 dígitos"
+                className="p-2.5 w-full border border-gray-200 rounded-xl text-center text-xl font-bold tracking-widest focus:outline-none focus:ring-2 focus:ring-gray-900 transition-colors"
+                value={codigo} onChange={(e) => setCodigo(e.target.value)} 
+              />
+              <input required type="password" name="nuevo_pass_unispace" autoComplete="new-password"  placeholder="Nueva Contraseña"
+                className="p-2.5 w-full border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-900 transition-colors"
+                value={nuevoPassword} onChange={(e) => setNuevoPassword(e.target.value)} 
+              />
+              <button type="submit" disabled={loading}
+                className="w-full bg-gray-900 text-white p-3 rounded-xl font-bold hover:bg-black transition-colors disabled:opacity-50"
+              >
+                {loading ? 'Guardando...' : 'Restablecer Contraseña'}
+              </button>
+            </form>
+          )}
+          
         </div>
       </div>
     </div>

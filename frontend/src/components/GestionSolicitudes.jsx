@@ -7,7 +7,6 @@ import {
 import { api } from '../utils/api';
 
 const PRIORIDAD_CONFIG = {
-  admin:      { label: 'Admin',  nivel: 3, Icon: Shield,        classes: 'bg-purple-50 border-purple-200 text-purple-700' },
   docente:    { label: 'Alta',   nivel: 2, Icon: UserCheck,     classes: 'bg-blue-50 border-blue-200 text-blue-700'       },
   estudiante: { label: 'Normal', nivel: 1, Icon: GraduationCap, classes: 'bg-gray-50 border-gray-200 text-gray-500'       },
 };

@@ -7,27 +7,43 @@ const Usuario = sequelize.define('Usuario', {
     defaultValue: DataTypes.UUIDV4,
     primaryKey: true,
   },
+
   nombre_completo: {
-    type: DataTypes.STRING(200),
+    type: DataTypes.STRING,
     allowNull: false,
   },
+
   correo: {
-    type: DataTypes.STRING(150),
+    type: DataTypes.STRING,
     allowNull: false,
     unique: true,
   },
+
   password_hash: {
-    type: DataTypes.STRING(255),
-    allowNull: true, // Cambiado a true para soportar login social
+    type: DataTypes.STRING,
+    allowNull: true,
   },
+
   rol: {
     type: DataTypes.ENUM('estudiante', 'docente', 'admin'),
     defaultValue: 'estudiante',
   },
+
+  // --- CAMPOS PARA RECUPERACIÓN DE CONTRASEÑA ---
+  reset_token: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+
+  reset_token_expires: {
+    type: DataTypes.DATE,
+    allowNull: true,
+  }
+
 }, {
   tableName: 'usuarios',
-  timestamps: true,
-  underscored: false,
+  freezeTableName: true,
+  timestamps: true
 });
 
 module.exports = Usuario;
