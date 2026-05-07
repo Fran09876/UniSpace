@@ -29,7 +29,14 @@ const Usuario = sequelize.define('Usuario', {
     defaultValue: 'estudiante',
   },
 
-  // --- CAMPOS PARA RECUPERACIÓN DE CONTRASEÑA ---
+  // 🔥 CURP OBLIGATORIO
+  curp: {
+    type: DataTypes.STRING(18),
+    unique: true,
+    allowNull: false,  // ← CAMBIO: Ahora es obligatorio
+  },
+
+  // --- RECUPERACIÓN ---
   reset_token: {
     type: DataTypes.STRING,
     allowNull: true,

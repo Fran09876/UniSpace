@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Plus, Edit2, Trash2, X, RefreshCw,
   Users, CheckCircle, AlertTriangle, Package,
+  Search, Filter
 } from 'lucide-react';
 import { api } from '../utils/api';
 
@@ -79,7 +80,7 @@ function RecursoModal({ recurso, onClose, onSaved }) {
 
   const handleSubmit = async () => {
     if (!form.nombre.trim()) { setError('El nombre es obligatorio.'); return; }
-    if (!form.tipo)           { setError('El tipo es obligatorio.'); return; }
+    if (!form.tipo)          { setError('El tipo es obligatorio.'); return; }
 
     const capacidadNum = parseInt(form.capacidad, 10);
     if (!form.capacidad || isNaN(capacidadNum) || capacidadNum < 1) {
@@ -264,6 +265,10 @@ export default function GestionRecursos() {
   const [deleting, setDeleting] = useState(null);
   const [toast,    setToast]    = useState(null);
 
+  // Estados de Filtros
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterTipo, setFilterTipo] = useState('todos');
+
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 3500);
@@ -335,6 +340,17 @@ export default function GestionRecursos() {
     }
   };
 
+  // --- Lógica de Filtrado (Memoizada) ---
+  const filteredRecursos = useMemo(() => {
+    return recursos.filter((r) => {
+      const searchString = `${r.nombre} ${r.descripcion || ''}`.toLowerCase();
+      const matchesSearch = searchString.includes(searchTerm.toLowerCase());
+      const matchesTipo = filterTipo === 'todos' || r.tipo === filterTipo;
+
+      return matchesSearch && matchesTipo;
+    });
+  }, [recursos, searchTerm, filterTipo]);
+
   return (
     <div className="animate-in fade-in duration-500 relative">
       {toast && (
@@ -358,7 +374,7 @@ export default function GestionRecursos() {
         <div>
           <h2 className="text-2xl font-bold text-gray-900 tracking-tight">Gestión de Recursos</h2>
           <p className="text-gray-500 mt-1 text-sm">
-            {loading ? 'Cargando...' : `${recursos.length} espacio(s) registrado(s)`}
+            {loading ? 'Cargando...' : `${filteredRecursos.length} espacio(s) encontrado(s)`}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -380,6 +396,31 @@ export default function GestionRecursos() {
         </div>
       </div>
 
+      {/* --- BARRA DE BÚSQUEDA Y FILTROS PREMIUM --- */}
+      <div className="flex flex-col md:flex-row gap-4 mb-8 bg-white/50 backdrop-blur-md p-4 rounded-[28px] border border-gray-200 shadow-sm">
+        <div className="flex-1 relative group">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 group-focus-within:text-gray-900 transition-colors" />
+          <input
+            type="text"
+            placeholder="Buscar por nombre o descripción..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-12 pr-4 py-3 bg-white border border-gray-200 rounded-2xl text-sm focus:ring-4 focus:ring-gray-900/5 focus:border-gray-900 outline-none transition-all placeholder:text-gray-400 font-medium"
+          />
+        </div>
+        <div className="relative min-w-[200px]">
+          <Filter className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+          <select
+            value={filterTipo}
+            onChange={(e) => setFilterTipo(e.target.value)}
+            className="w-full pl-10 pr-10 py-3 bg-white border border-gray-200 rounded-2xl text-sm focus:ring-4 focus:ring-gray-900/5 focus:border-gray-900 outline-none transition-all appearance-none cursor-pointer font-bold text-gray-700"
+          >
+            <option value="todos">Todos los Tipos</option>
+            {TIPOS.map(t => <option key={t} value={t}>{t}</option>)}
+          </select>
+        </div>
+      </div>
+
       {/* Estado: cargando */}
       {loading && (
         <div className="flex items-center justify-center h-48 text-gray-400 gap-3">
@@ -388,7 +429,7 @@ export default function GestionRecursos() {
         </div>
       )}
 
-      {/* Estado: lista vacía */}
+      {/* Estado: lista totalmente vacía desde DB */}
       {!loading && recursos.length === 0 && (
         <div className="bg-white border border-gray-100 rounded-2xl p-16 text-center">
           <div className="w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-5">
@@ -407,10 +448,21 @@ export default function GestionRecursos() {
         </div>
       )}
 
-      {/* Grid de recursos */}
-      {!loading && recursos.length > 0 && (
+      {/* Estado: Búsqueda sin resultados */}
+      {!loading && recursos.length > 0 && filteredRecursos.length === 0 && (
+        <div className="bg-white border border-gray-100 rounded-2xl p-16 text-center">
+          <div className="w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-5">
+            <Search className="w-7 h-7 text-gray-400" />
+          </div>
+          <p className="text-gray-700 font-semibold mb-1">No se encontraron resultados</p>
+          <p className="text-sm text-gray-400 mb-6">Prueba ajustando los filtros o el término de búsqueda.</p>
+        </div>
+      )}
+
+      {/* Grid de recursos filtrados */}
+      {!loading && filteredRecursos.length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {recursos.map((recurso) => {
+          {filteredRecursos.map((recurso) => {
             const isDeleting = deleting === recurso.id_recurso;
             const emoji      = TIPO_EMOJI[recurso.tipo] || '📍';
 

@@ -3,7 +3,7 @@ const { Op } = require('sequelize');
 const Reserva = require('../models/Reserva');
 const Recurso = require('../models/Recurso');
 const Usuario = require('../models/Usuario');
-const { enviarCorreoReserva } = require('../services/emailService'); // ← AÑADIDO
+const { enviarCorreoReserva } = require('../services/emailService');
 
 const STATUS_COLORS = {
   confirmada: '#16a34a',
@@ -12,22 +12,46 @@ const STATUS_COLORS = {
 
 const NIVEL_PRIORIDAD = { admin: 3, docente: 2, estudiante: 1 };
 
-// Formatea fecha DATEONLY (string "YYYY-MM-DD") → "YYYY-MM-DD"
 const formatFecha = (fecha) => {
   if (!fecha) return '';
   return String(fecha).substring(0, 10);
 };
 
-// Formatea TIME de Postgres ("HH:MM:SS" o "HH:MM") → "HH:MM"
 const formatHora = (hora) => {
-  if (!hora) return '00:00';
+  if (!hora) return '';
   return String(hora).substring(0, 5);
 };
 
-// POST /api/reservas/crear
+const marcarReservasExpiradas = async () => {
+  const ahora = new Date();
+  const fechaHoyStr = ahora.toISOString().substring(0, 10);
+  const horaActual = String(ahora.getHours()).padStart(2, '0') + ':' + String(ahora.getMinutes()).padStart(2, '0');
+
+  await Reserva.update(
+    { estado: 'expirada' },
+    {
+      where: {
+        estado: 'confirmada',
+        [Op.or]: [
+          { fecha: { [Op.lt]: fechaHoyStr } },
+          {
+            fecha: fechaHoyStr,
+            hora_fin: { [Op.lte]: horaActual }
+          }
+        ]
+      }
+    }
+  );
+};
+
 const crearReserva = async (req, res) => {
   try {
     const { id_usuario, id_recurso, fecha, hora_inicio, hora_fin, proposito } = req.body;
+    
+    const usuario = await Usuario.findByPk(id_usuario, { attributes: ['rol'] });
+    if (usuario?.rol === 'admin') {
+      return res.status(403).json({ mensaje: 'Los administradores no pueden solicitar reservas.' });
+    }
 
     if (!id_usuario || !id_recurso || !fecha || !hora_inicio || !hora_fin || !proposito) {
       return res.status(400).json({ mensaje: 'Todos los campos son obligatorios.' });
@@ -36,7 +60,14 @@ const crearReserva = async (req, res) => {
       return res.status(400).json({ mensaje: 'La hora de inicio debe ser anterior a la hora de fin.' });
     }
 
-    // Bloquear solo si hay reserva CONFIRMADA que se solape
+    const recurso = await Recurso.findByPk(id_recurso, { attributes: ['estado', 'nombre'] });
+    if (!recurso) {
+      return res.status(404).json({ mensaje: 'Recurso no encontrado.' });
+    }
+    if (recurso.estado === 'mantenimiento') {
+      return res.status(409).json({ mensaje: `"${recurso.nombre}" está en mantenimiento. No se pueden hacer reservas.` });
+    }
+
     const bloqueada = await Reserva.findOne({
       where: {
         id_recurso,
@@ -80,9 +111,10 @@ const crearReserva = async (req, res) => {
   }
 };
 
-// GET /api/reservas/calendario
 const obtenerEventosCalendario = async (req, res) => {
   try {
+    await marcarReservasExpiradas();
+
     const reservas = await Reserva.findAll({
       where: { estado: { [Op.in]: ['pendiente', 'confirmada'] } },
       include: [
@@ -119,10 +151,11 @@ const obtenerEventosCalendario = async (req, res) => {
   }
 };
 
-// GET /api/reservas/usuario/:id_usuario
 const obtenerReservasPorUsuario = async (req, res) => {
   try {
     const { id_usuario } = req.params;
+    await marcarReservasExpiradas();
+    
     const reservas = await Reserva.findAll({
       where: { id_usuario },
       include: [{ model: Recurso, attributes: ['nombre', 'tipo'] }],
@@ -135,7 +168,6 @@ const obtenerReservasPorUsuario = async (req, res) => {
   }
 };
 
-// GET /api/reservas/pendientes
 const obtenerReservasPendientes = async (req, res) => {
   try {
     const reservas = await Reserva.findAll({
@@ -182,20 +214,22 @@ const obtenerReservasPendientes = async (req, res) => {
   }
 };
 
-// POST /api/reservas/gestionar/:id_reserva
 const gestionarReserva = async (req, res) => {
   try {
     const { id_reserva } = req.params;
-    const { nuevoEstado } = req.body;
+    const { nuevoEstado, motivo_cancelacion } = req.body;
 
     if (!['confirmada', 'cancelada'].includes(nuevoEstado)) {
       return res.status(400).json({ mensaje: 'Estado no válido.' });
     }
 
-    // ── MODIFICADO: se incluyen Usuario y Recurso para tener los datos del correo ──
+    if (nuevoEstado === 'cancelada' && !motivo_cancelacion?.trim()) {
+      return res.status(400).json({ mensaje: 'El motivo de cancelación es obligatorio.' });
+    }
+
     const reserva = await Reserva.findByPk(id_reserva, {
       include: [
-        { model: Usuario, attributes: ['nombre_completo', 'correo'] },
+        { model: Usuario, attributes: ['nombre_completo', 'correo', 'rol'] },
         { model: Recurso, attributes: ['nombre'] },
       ],
     });
@@ -208,37 +242,65 @@ const gestionarReserva = async (req, res) => {
     }
 
     reserva.estado = nuevoEstado;
+    if (nuevoEstado === 'cancelada') {
+      reserva.motivo_cancelacion = motivo_cancelacion;
+    }
     await reserva.save();
 
     let canceladas = 0;
 
+    // LÓGICA MODIFICADA: Encontrar conflictos y asignar el motivo automático
     if (nuevoEstado === 'confirmada') {
-      const [filas] = await Reserva.update(
-        { estado: 'cancelada' },
-        {
-          where: {
-            id_reserva:  { [Op.ne]: id_reserva },
-            id_recurso:  reserva.id_recurso,
-            fecha:       reserva.fecha,
-            estado:      'pendiente',
-            hora_inicio: { [Op.lt]: reserva.hora_fin },
-            hora_fin:    { [Op.gt]: reserva.hora_inicio },
-          },
+      const solicitudesEnConflicto = await Reserva.findAll({
+        where: {
+          id_reserva:  { [Op.ne]: id_reserva },
+          id_recurso:  reserva.id_recurso,
+          fecha:       reserva.fecha,
+          estado:      'pendiente',
+          hora_inicio: { [Op.lt]: reserva.hora_fin },
+          hora_fin:    { [Op.gt]: reserva.hora_inicio },
+        },
+        include: [{ model: Usuario, attributes: ['nombre_completo', 'correo'] }]
+      });
+
+      const esDocente = reserva.Usuario?.rol === 'docente';
+      const motivoPrioridad = `Su solicitud ha sido cancelada automáticamente. Se ha aprobado una reserva de mayor o igual prioridad (${esDocente ? 'Prioridad Docente' : 'Orden de llegada'}) para el mismo horario y espacio.`;
+
+      if (solicitudesEnConflicto.length > 0) {
+        await Reserva.update(
+          { estado: 'cancelada', motivo_cancelacion: motivoPrioridad },
+          {
+            where: {
+              id_reserva: { [Op.in]: solicitudesEnConflicto.map(s => s.id_reserva) }
+            }
+          }
+        );
+
+        for (const sol of solicitudesEnConflicto) {
+          if (sol.Usuario?.correo) {
+            enviarCorreoReserva({
+              to: sol.Usuario.correo,
+              nombre: sol.Usuario.nombre_completo,
+              estado: 'cancelada',
+              reserva: sol,
+              motivo: motivoPrioridad
+            }).catch(e => console.error("Error envío correo conflicto:", e));
+          }
         }
-      );
-      canceladas = filas;
+        canceladas = solicitudesEnConflicto.length;
+      }
     }
 
-    // ── AÑADIDO: enviar correo al solicitante de forma no bloqueante ──
+    // ENVÍO DE CORREO: Pasamos explícitamente el motivo_cancelacion a la reserva gestionada manualmente
     if (reserva.Usuario?.correo) {
       enviarCorreoReserva({
         to:     reserva.Usuario.correo,
         nombre: reserva.Usuario.nombre_completo,
         estado: nuevoEstado,
-        reserva,                  // lleva reserva.Recurso.nombre, fecha, horas
+        reserva: reserva,
+        motivo: motivo_cancelacion 
       }).catch((err) => console.error('enviarCorreoReserva (async):', err));
     }
-    // ── FIN bloque añadido ──
 
     res.json({
       mensaje: `Reserva ${nuevoEstado} exitosamente.${
@@ -252,10 +314,66 @@ const gestionarReserva = async (req, res) => {
   }
 };
 
+const cancelarPorMantenimiento = async (req, res) => {
+  try {
+    const { id_recurso } = req.params;
+
+    const reservasActivas = await Reserva.findAll({
+      where: {
+        id_recurso,
+        estado: { [Op.in]: ['pendiente', 'confirmada'] }
+      },
+      include: [
+        { model: Usuario, attributes: ['nombre_completo', 'correo'] },
+        { model: Recurso, attributes: ['nombre'] }
+      ]
+    });
+
+    if (reservasActivas.length === 0) {
+      return res.json({ mensaje: 'No hay reservas activas para este recurso.', canceladas: 0 });
+    }
+
+    const motivoMantenimiento = 'El recurso ha sido bloqueado por mantenimiento.';
+    const [filas] = await Reserva.update(
+      { 
+        estado: 'cancelada',
+        motivo_cancelacion: motivoMantenimiento 
+      },
+      {
+        where: {
+          id_recurso,
+          estado: { [Op.in]: ['pendiente', 'confirmada'] }
+        }
+      }
+    );
+
+    for (const reserva of reservasActivas) {
+      if (reserva.Usuario?.correo) {
+        enviarCorreoReserva({
+          to:     reserva.Usuario.correo,
+          nombre: reserva.Usuario.nombre_completo,
+          estado: 'cancelada',
+          reserva: reserva,
+          motivo: motivoMantenimiento,
+        }).catch((err) => console.error('Email mantenimiento:', err));
+      }
+    }
+
+    res.json({
+      mensaje: `Se cancelaron ${filas} reserva(s) por mantenimiento del recurso.`,
+      canceladas: filas
+    });
+  } catch (error) {
+    console.error('cancelarPorMantenimiento:', error);
+    res.status(500).json({ mensaje: 'Error al cancelar reservas.' });
+  }
+};
+
 module.exports = {
   crearReserva,
   obtenerEventosCalendario,
   obtenerReservasPorUsuario,
   obtenerReservasPendientes,
   gestionarReserva,
+  cancelarPorMantenimiento,
 };

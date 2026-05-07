@@ -33,8 +33,13 @@ const Reserva = sequelize.define('Reserva', {
     allowNull: false,
   },
   estado: {
-    type: DataTypes.ENUM('pendiente', 'confirmada', 'cancelada'),
+    type: DataTypes.ENUM('pendiente', 'confirmada', 'cancelada', 'expirada'),
     defaultValue: 'pendiente',
+  },
+  // 🔥 Motivo de cancelación (si aplica)
+  motivo_cancelacion: {
+    type: DataTypes.TEXT,
+    allowNull: true,
   },
 }, {
   tableName: 'reservas',

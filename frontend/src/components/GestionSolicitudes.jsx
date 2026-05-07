@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Check, X, Clock, User, MapPin, RefreshCw,
   ClipboardList, Calendar, AlertCircle,
   Shield, UserCheck, GraduationCap,
+  Search, Filter
 } from 'lucide-react';
 import { api } from '../utils/api';
 
@@ -22,15 +23,6 @@ const safeJson = async (res) => {
   try { return await res.json(); } catch { return {}; }
 };
 
-// ---------------------------------------------------------------------------
-// SolicitudCard
-// FIX CRÍTICO: Los botones siempre montan los MISMOS nodos SVG.
-// Antes se hacía {isProcessing ? <RefreshCw/> : <Check/>}, lo que causa que
-// React intente mover/reemplazar nodos SVG en el DOM mientras están animados,
-// disparando el error "insertBefore: node is not a child of this node".
-// Solución: renderizar ambos íconos siempre, y mostrar/ocultar con CSS (opacity
-// + pointer-events), de modo que React nunca desmonta ni mueve esos nodos.
-// ---------------------------------------------------------------------------
 function SolicitudCard({ req, isProcessing, onAction }) {
   const rol    = req.Usuario?.rol || 'estudiante';
   const priCfg = PRIORIDAD_CONFIG[rol] || PRIORIDAD_CONFIG.estudiante;
@@ -97,25 +89,16 @@ function SolicitudCard({ req, isProcessing, onAction }) {
 
         {/* ── Acciones ── */}
         <div className="flex lg:flex-col gap-2 border-t lg:border-t-0 lg:border-l border-gray-100 pt-4 lg:pt-0 lg:pl-5 shrink-0">
-
-          {/*
-            FIX: Ambos íconos (RefreshCw y Check) están SIEMPRE en el DOM.
-            Se alternan mediante clases de visibilidad (opacity-0 / opacity-100)
-            para que React nunca mueva ni reemplace nodos SVG durante un commit,
-            eliminando el crash "insertBefore: node is not a child".
-          */}
           <button
             onClick={() => onAction(req.id_reserva, 'confirmada')}
             disabled={isProcessing}
             className="relative flex items-center justify-center gap-2 px-5 py-2.5 bg-gray-900 text-white text-sm font-semibold rounded-xl hover:bg-black transition-colors disabled:opacity-50 flex-1 lg:flex-none lg:w-32"
           >
-            {/* Spinner: visible solo cuando isProcessing */}
             <RefreshCw
               className={`w-4 h-4 absolute left-3 transition-opacity duration-150 ${
                 isProcessing ? 'opacity-100 animate-spin' : 'opacity-0'
               }`}
             />
-            {/* Check: visible cuando no está procesando */}
             <Check
               className={`w-4 h-4 transition-opacity duration-150 ${
                 isProcessing ? 'opacity-0' : 'opacity-100'
@@ -125,7 +108,7 @@ function SolicitudCard({ req, isProcessing, onAction }) {
           </button>
 
           <button
-            onClick={() => onAction(req.id_reserva, 'cancelada')}
+            onClick={() => onAction(req.id_reserva, 'cancelada', true)}
             disabled={isProcessing}
             className="flex items-center justify-center gap-2 px-5 py-2.5 bg-red-50 text-red-600 text-sm font-semibold rounded-xl hover:bg-red-100 border border-red-100 transition-colors disabled:opacity-50 flex-1 lg:flex-none lg:w-32"
           >
@@ -147,6 +130,14 @@ export default function GestionSolicitudes() {
   const [processing, setProcessing] = useState(null);
   const [toast,      setToast]      = useState(null);
   const [fetchError, setFetchError] = useState(null);
+
+  // --- Estados de Búsqueda y Filtro ---
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterPriority, setFilterPriority] = useState('todos');
+
+  // Modal para cancelación con motivo
+  const [cancelModal, setCancelModal] = useState({ mostrar: false, idReserva: null, motivo: '' });
+  const [cancelandoConMotivo, setCancelandoConMotivo] = useState(false);
 
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type });
@@ -174,10 +165,20 @@ export default function GestionSolicitudes() {
 
   useEffect(() => { fetchRequests(); }, [fetchRequests]);
 
-  const handleAction = async (idReserva, nuevoEstado) => {
+  const handleAction = async (idReserva, nuevoEstado, pedirMotivo = false, motivoDirecto = null) => {
+    if (nuevoEstado === 'cancelada' && pedirMotivo) {
+      setCancelModal({ mostrar: true, idReserva, motivo: '' });
+      return;
+    }
+
     setProcessing(idReserva);
     try {
-      const res  = await api.post(`/reservas/gestionar/${idReserva}`, { nuevoEstado });
+      const payload = { nuevoEstado };
+      if (nuevoEstado === 'cancelada' && motivoDirecto) {
+        payload.motivo_cancelacion = motivoDirecto;
+      }
+
+      const res  = await api.post(`/reservas/gestionar/${idReserva}`, payload);
       const data = await safeJson(res);
       if (res.ok) {
         const label = nuevoEstado === 'confirmada' ? 'confirmada' : 'rechazada';
@@ -191,14 +192,25 @@ export default function GestionSolicitudes() {
     } catch (err) {
       showToast(`Error de conexión: ${err.message || 'sin respuesta.'}`, 'error');
     } finally {
-      // Siempre libera el botón y recarga la lista
       setProcessing(null);
+      setCancelandoConMotivo(false);
       await fetchRequests();
     }
   };
 
-  const conConflicto  = requests.filter((r) => r.tiene_conflicto);
-  const sinConflicto  = requests.filter((r) => !r.tiene_conflicto);
+  // --- Lógica de Filtrado (Memoizada) ---
+  const filteredRequests = useMemo(() => {
+    return requests.filter((req) => {
+      const searchString = `${req.Usuario?.nombre_completo || ''} ${req.Recurso?.nombre || ''} ${req.proposito || ''}`.toLowerCase();
+      const matchesSearch = searchString.includes(searchTerm.toLowerCase());
+      const matchesPriority = filterPriority === 'todos' || req.Usuario?.rol === filterPriority;
+
+      return matchesSearch && matchesPriority;
+    });
+  }, [requests, searchTerm, filterPriority]);
+
+  const conConflicto  = filteredRequests.filter((r) => r.tiene_conflicto);
+  const sinConflicto  = filteredRequests.filter((r) => !r.tiene_conflicto);
   const hayConflictos = conConflicto.length > 0;
 
   return (
@@ -222,18 +234,46 @@ export default function GestionSolicitudes() {
               ? 'Cargando...'
               : fetchError
               ? 'Error al cargar solicitudes'
-              : `${requests.length} solicitud${requests.length !== 1 ? 'es' : ''} por gestionar`}
+              : `${filteredRequests.length} solicitud${filteredRequests.length !== 1 ? 'es' : ''} por gestionar`}
           </p>
         </div>
-        {/* FIX: mismo nodo RefreshCw siempre presente, solo cambia la clase animate-spin */}
-        <button
-          onClick={fetchRequests}
-          disabled={loading}
-          className="flex items-center gap-2 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50"
-        >
-          <RefreshCw className={`w-4 h-4 transition-transform ${loading ? 'animate-spin' : ''}`} />
-          Actualizar
-        </button>
+      </div>
+
+      {/* --- BARRA DE BÚSQUEDA Y FILTROS PREMIUM --- */}
+      <div className="flex flex-col md:flex-row gap-4 mb-8 bg-white/50 backdrop-blur-md p-4 rounded-[28px] border border-gray-200 shadow-sm">
+        <div className="flex-1 relative group">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 group-focus-within:text-gray-900 transition-colors" />
+          <input
+            type="text"
+            placeholder="Buscar por usuario, espacio o propósito..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-12 pr-4 py-3 bg-white border border-gray-200 rounded-2xl text-sm focus:ring-4 focus:ring-gray-900/5 focus:border-gray-900 outline-none transition-all placeholder:text-gray-400 font-medium"
+          />
+        </div>
+        <div className="flex gap-2">
+          <div className="relative min-w-[200px]">
+            <Filter className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+            <select
+              value={filterPriority}
+              onChange={(e) => setFilterPriority(e.target.value)}
+              className="w-full pl-10 pr-10 py-3 bg-white border border-gray-200 rounded-2xl text-sm focus:ring-4 focus:ring-gray-900/5 focus:border-gray-900 outline-none transition-all appearance-none cursor-pointer font-bold text-gray-700"
+            >
+              <option value="todos">Prioridad: Todas</option>
+              <option value="docente">Solo Docentes (Alta)</option>
+              <option value="estudiante">Solo Estudiantes (Normal)</option>
+            </select>
+          </div>
+
+          <button
+            onClick={fetchRequests}
+            disabled={loading}
+            className="p-3 bg-white border border-gray-200 rounded-2xl text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-all active:scale-95 disabled:opacity-50"
+            title="Actualizar"
+          >
+            <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
+          </button>
+        </div>
       </div>
 
       {/* Leyenda de prioridad */}
@@ -277,7 +317,7 @@ export default function GestionSolicitudes() {
         </div>
       )}
 
-      {/* Estado: lista vacía */}
+      {/* Estado: lista totalmente vacía desde la DB */}
       {!loading && !fetchError && requests.length === 0 && (
         <div className="bg-white rounded-2xl border border-gray-100 p-16 text-center">
           <div className="w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-5">
@@ -285,6 +325,17 @@ export default function GestionSolicitudes() {
           </div>
           <p className="text-gray-700 font-semibold mb-1">No hay solicitudes pendientes</p>
           <p className="text-sm text-gray-400">Todas las solicitudes han sido gestionadas.</p>
+        </div>
+      )}
+
+      {/* Estado: Búsqueda sin resultados */}
+      {!loading && !fetchError && requests.length > 0 && filteredRequests.length === 0 && (
+        <div className="bg-white border border-gray-100 rounded-2xl p-16 text-center">
+          <div className="w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-5">
+            <Search className="w-7 h-7 text-gray-400" />
+          </div>
+          <p className="text-gray-700 font-semibold mb-1">No se encontraron resultados</p>
+          <p className="text-sm text-gray-400 mb-6">Prueba ajustando los filtros o el término de búsqueda.</p>
         </div>
       )}
 
@@ -329,6 +380,62 @@ export default function GestionSolicitudes() {
               />
             ))}
           </div>
+        </div>
+      )}
+
+      {/* Modal de Cancelación con Motivo */}
+      {cancelModal.mostrar && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <form
+            onSubmit={async (e) => {
+              e.preventDefault();
+              // FIX: se captura el motivo en una variable local antes de cualquier
+              // setState, garantizando que el valor llegue íntegro al fetch POST
+              const motivoActual = cancelModal.motivo.trim();
+              if (!motivoActual) {
+                showToast('El motivo es obligatorio.', 'error');
+                return;
+              }
+              setCancelandoConMotivo(true);
+              setCancelModal({ mostrar: false, idReserva: null, motivo: '' });
+              await handleAction(cancelModal.idReserva, 'cancelada', false, motivoActual);
+            }}
+            className="w-full max-w-md bg-white rounded-[28px] shadow-2xl p-6 md:p-8 space-y-5"
+          >
+            <div>
+              <h3 className="text-xl font-bold text-gray-900">Cancelar solicitud</h3>
+              <p className="text-sm text-gray-500">Escribe el motivo de la cancelación. Se enviará un correo al usuario.</p>
+            </div>
+
+            <div className="space-y-2">
+              <label className="block text-sm font-semibold text-gray-700">Motivo de cancelación</label>
+              <textarea
+                value={cancelModal.motivo}
+                onChange={(e) => setCancelModal({ ...cancelModal, motivo: e.target.value })}
+                placeholder="Ej. El espacio ha sido bloqueado por mantenimiento..."
+                className="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-red-500 resize-none"
+                rows="4"
+                required
+              />
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setCancelModal({ mostrar: false, idReserva: null, motivo: '' })}
+                className="flex-1 px-4 py-3 text-sm font-semibold text-gray-700 bg-gray-100 rounded-2xl hover:bg-gray-200 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                disabled={cancelandoConMotivo || !cancelModal.motivo.trim()}
+                className="flex-1 px-4 py-3 text-sm font-semibold text-white bg-red-600 rounded-2xl hover:bg-red-700 transition-colors disabled:opacity-50"
+              >
+                {cancelandoConMotivo ? 'Enviando...' : 'Rechazar'}
+              </button>
+            </div>
+          </form>
         </div>
       )}
     </div>

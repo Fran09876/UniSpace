@@ -3,13 +3,13 @@ import { useNavigate } from 'react-router-dom';
 import {
   Home, Calendar, BookMarked, LogOut,
   Menu, X, BellRing, CheckCircle, Clock,
-  MapPin, Building, Users // <-- Ícono de Usuarios añadido
+  MapPin, Building, Users
 } from 'lucide-react';
 import CalendarView      from './CalendarView';
 import GestionSolicitudes from './GestionSolicitudes';
 import GestionRecursos    from './GestionRecursos';
 import ReservationsView   from './ReservationsView';
-import GestionUsuarios    from './GestionUsuarios'; // <-- Nueva vista importada
+import GestionUsuarios    from './GestionUsuarios';
 import { api }            from '../utils/api';
 
 function InicioView({ onNavigate }) {
@@ -29,9 +29,8 @@ function InicioView({ onNavigate }) {
 
     const loadStats = async () => {
       try {
-        // 1. REGLA DE NEGOCIO: ¿A qué endpoint le preguntamos?
-        const endpointReservas = user.rol === 'admin' 
-          ? '/reservas/calendario' 
+        const endpointReservas = user.rol === 'admin'
+          ? '/reservas/calendario'
           : `/reservas/usuario/${user.id}`;
 
         const [resReservas, resRecursos] = await Promise.all([
@@ -42,7 +41,6 @@ function InicioView({ onNavigate }) {
         const reservas = resReservas.ok ? await resReservas.json() : [];
         const recursos  = resRecursos.ok ? await resRecursos.json()  : [];
 
-        // 2. Filtramos entendiendo ambos formatos (el de usuario normal y el de calendario)
         const activas = reservas.filter((r) => {
           const estado = r.estado || r.extendedProps?.estado;
           return estado === 'confirmada' || estado === 'pendiente';
@@ -55,11 +53,8 @@ function InicioView({ onNavigate }) {
           .filter((r) => {
             const estado = r.estado || r.extendedProps?.estado;
             if (estado === 'cancelada') return false;
-            
-            // Extraemos la fecha sin importar qué endpoint la mandó
             const fechaStr = r.fecha || (r.start ? r.start.split('T')[0] : '');
             if (!fechaStr) return false;
-
             const [y, m, d] = String(fechaStr).substring(0, 10).split('-');
             return new Date(Number(y), Number(m) - 1, Number(d)) >= hoy;
           })
@@ -71,12 +66,11 @@ function InicioView({ onNavigate }) {
 
         let proximaStr = 'Sin pendientes';
         if (proxima) {
-            const fechaStr = proxima.fecha || (proxima.start ? proxima.start.split('T')[0] : '');
-            const horaStr  = proxima.hora_inicio || (proxima.start ? proxima.start.split('T')[1].substring(0,5) : '');
-            
-            const [y, m, d] = String(fechaStr).substring(0, 10).split('-');
-            const fechaObj = new Date(Number(y), Number(m) - 1, Number(d));
-            proximaStr = `${fechaObj.toLocaleDateString('es-MX', { month: 'short', day: 'numeric' })} ${String(horaStr).substring(0, 5)}`;
+          const fechaStr = proxima.fecha || (proxima.start ? proxima.start.split('T')[0] : '');
+          const horaStr  = proxima.hora_inicio || (proxima.start ? proxima.start.split('T')[1].substring(0, 5) : '');
+          const [y, m, d] = String(fechaStr).substring(0, 10).split('-');
+          const fechaObj = new Date(Number(y), Number(m) - 1, Number(d));
+          proximaStr = `${fechaObj.toLocaleDateString('es-MX', { month: 'short', day: 'numeric' })} ${String(horaStr).substring(0, 5)}`;
         }
 
         const disponibles = recursos.filter((r) => r.estado === 'disponible').length;
@@ -102,7 +96,7 @@ function InicioView({ onNavigate }) {
     { label: 'Espacios disponibles', value: stats.espaciosDisponibles, icon: MapPin      },
   ];
 
- return (
+  return (
     <div className="space-y-8 animate-in fade-in duration-500">
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
         {statCards.map((stat) => (
@@ -141,12 +135,15 @@ function InicioView({ onNavigate }) {
           >
             {user.rol === 'admin' ? 'Ver Calendario' : 'Nueva Reserva'}
           </button>
-          <button
-            onClick={() => onNavigate('reservas')}
-            className="px-8 py-3.5 bg-white text-gray-700 font-semibold rounded-2xl border border-gray-200 hover:bg-gray-50 transition-colors"
-          >
-            {user.rol === 'admin' ? 'Ver Reservas' : 'Ver Mis Reservas'}
-          </button>
+          {/* FIX: el botón secundario solo aparece para no-admin */}
+          {user.rol !== 'admin' && (
+            <button
+              onClick={() => onNavigate('reservas')}
+              className="px-8 py-3.5 bg-white text-gray-700 font-semibold rounded-2xl border border-gray-200 hover:bg-gray-50 transition-colors"
+            >
+              Ver Mis Reservas
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -158,18 +155,21 @@ export default function DashboardLayout() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [view, setView] = useState('inicio');
 
-const userData = JSON.parse(localStorage.getItem('user') || '{}');
+  const userData = JSON.parse(localStorage.getItem('user') || '{}');
   const nombre   = userData.nombre || 'Usuario';
   const isAdmin  = userData.rol === 'admin';
 
   const navigation = [
-    { id: 'inicio',           name: 'Inicio',              icon: Home       },
-    { id: 'calendario',       name: 'Calendario',          icon: Calendar   },
-    { id: 'reservas',         name: isAdmin ? 'Reservas' : 'Mis Reservas',  icon: BookMarked },
+    { id: 'inicio',           name: 'Inicio',              icon: Home      },
+    { id: 'calendario',       name: 'Calendario',          icon: Calendar  },
+    // FIX: "Mis Reservas" solo aparece para usuarios no-admin
+    ...(!isAdmin ? [
+      { id: 'reservas', name: 'Mis Reservas', icon: BookMarked },
+    ] : []),
     ...(isAdmin ? [
-      { id: 'gestion_admin',    name: 'Solicitudes',        icon: BellRing  },
-      { id: 'gestion_recursos', name: 'Gestionar Espacios', icon: Building  },
-      { id: 'gestion_usuarios', name: 'Usuarios y Roles',   icon: Users     }, 
+      { id: 'gestion_admin',    name: 'Solicitudes',        icon: BellRing },
+      { id: 'gestion_recursos', name: 'Gestionar Espacios', icon: Building },
+      { id: 'gestion_usuarios', name: 'Usuarios y Roles',   icon: Users    },
     ] : []),
   ];
 
@@ -179,7 +179,7 @@ const userData = JSON.parse(localStorage.getItem('user') || '{}');
     reservas:         'Mis Reservas',
     gestion_admin:    'Administración de Solicitudes',
     gestion_recursos: 'Gestión de Recursos',
-    gestion_usuarios: 'Gestión de Usuarios', // <-- Título de la nueva vista
+    gestion_usuarios: 'Gestión de Usuarios',
   };
 
   const handleLogout = () => {
@@ -283,8 +283,7 @@ const userData = JSON.parse(localStorage.getItem('user') || '{}');
             {view === 'reservas'         && <ReservationsView onNavigate={setView} />}
             {view === 'gestion_admin'    && <GestionSolicitudes />}
             {view === 'gestion_recursos' && <GestionRecursos />}
-            {/* <-- Renderizado de la nueva vista de usuarios --> */}
-            {view === 'gestion_usuarios' && <GestionUsuarios />} 
+            {view === 'gestion_usuarios' && <GestionUsuarios />}
           </div>
         </main>
       </div>

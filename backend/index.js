@@ -7,12 +7,22 @@ const sequelize = require('./database');
 const Usuario = require('./models/Usuario');
 const Recurso = require('./models/Recurso');
 const Reserva = require('./models/Reserva');
+const Estudiante = require('./models/Estudiante');
+const Docente = require('./models/Docente');
+const Administrador = require('./models/Administrador');
 
 // 2. Asociaciones — deben definirse ANTES de importar rutas
 Usuario.hasMany(Reserva, { foreignKey: 'id_usuario' });
 Recurso.hasMany(Reserva, { foreignKey: 'id_recurso' });
 Reserva.belongsTo(Usuario, { foreignKey: 'id_usuario' });
 Reserva.belongsTo(Recurso, { foreignKey: 'id_recurso' });
+
+Usuario.hasOne(Estudiante, { foreignKey: 'id_usuario' });
+Usuario.hasOne(Docente, { foreignKey: 'id_usuario' });
+Usuario.hasOne(Administrador, { foreignKey: 'id_usuario' });
+Estudiante.belongsTo(Usuario, { foreignKey: 'id_usuario' });
+Docente.belongsTo(Usuario, { foreignKey: 'id_usuario' });
+Administrador.belongsTo(Usuario, { foreignKey: 'id_usuario' });
 
 // 3. Rutas
 const authRoutes    = require('./routes/authRoutes');
@@ -46,7 +56,7 @@ app.use((err, _req, res, _next) => {
 
 const iniciarServidor = async () => {
   try {
-    await sequelize.authenticate();
+    await sequelize.sync({ alter: true });
     console.log('✅ Conexión a PostgreSQL establecida.');
 
     await sequelize.sync({ alter: false });

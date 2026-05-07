@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import FullCalendar from '@fullcalendar/react';
 import dayGridPlugin from '@fullcalendar/daygrid';
 import timeGridPlugin from '@fullcalendar/timegrid';
 import interactionPlugin from '@fullcalendar/interaction';
-import { X, Calendar, Clock } from 'lucide-react';
+import { X, Calendar, Clock, Search, Filter } from 'lucide-react';
 import { api } from '../utils/api';
 
 const PROPOSITO_EJEMPLO = 'Ej: Clase de programación orientada a objetos';
@@ -120,13 +120,6 @@ function ReservationModal({ selectInfo, recursos, onClose, onConfirm }) {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5">Propósito</label>
-            {/*
-              FIX: textarea con ejemplo visual auto-limpiable.
-              - Cuando showEjemplo=true: el texto del textarea está vacío y se superpone
-                un párrafo de ejemplo en gris (pointer-events-none).
-              - Al hacer clic (onFocus), el overlay desaparece y el usuario escribe.
-              - Si sale sin escribir (onBlur), el overlay vuelve.
-            */}
             <div className="relative">
               <textarea
                 value={proposito}
@@ -206,6 +199,10 @@ export default function CalendarView({ isSidebarOpen }) {
   const [tooltip,    setTooltip]    = useState({ event: null, position: { x: 0, y: 0 } });
   const [toast,      setToast]      = useState(null);
 
+  // Estados de Búsqueda y Filtros
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterStatus, setFilterStatus] = useState('todos');
+
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 4500);
@@ -240,9 +237,38 @@ export default function CalendarView({ isSidebarOpen }) {
     }
   };
 
+  // Filtrado de Eventos para el Buscador
+  const filteredEventos = useMemo(() => {
+    return eventos.filter((ev) => {
+      const props = ev.extendedProps || {};
+      const searchStr = `${ev.title || ''} ${props.usuario || ''} ${props.recurso || ''} ${props.proposito || ''}`.toLowerCase();
+      const matchesSearch = searchStr.includes(searchTerm.toLowerCase());
+      const matchesStatus = filterStatus === 'todos' || props.estado === filterStatus;
+      return matchesSearch && matchesStatus;
+    });
+  }, [eventos, searchTerm, filterStatus]);
+
   const handleDateSelect = (info) => {
-    if (user.rol === 'admin') return; 
-    if (info.allDay) return;
+    // 1. Validar que no sea admin
+    if (user.rol === 'admin') {
+      calendarRef.current?.getApi().unselect();
+      return; 
+    }
+    
+    // 2. No permitir reservas de día completo
+    if (info.allDay) {
+      calendarRef.current?.getApi().unselect();
+      return;
+    }
+
+    // 3. Validar fecha y hora actual (No permitir reservar en el pasado)
+    const now = new Date();
+    if (info.start < now) {
+      showToast('No puedes reservar en una fecha u hora que ya pasó.', 'error');
+      calendarRef.current?.getApi().unselect();
+      return;
+    }
+
     setTooltip({ event: null, position: { x: 0, y: 0 } });
     setSelectInfo(info);
   };
@@ -291,6 +317,32 @@ export default function CalendarView({ isSidebarOpen }) {
         </div>
       )}
 
+      {/* --- BARRA DE BÚSQUEDA Y FILTROS PREMIUM --- */}
+      <div className="flex flex-col md:flex-row gap-4 mb-6 bg-gray-50/50 backdrop-blur-md p-4 rounded-[28px] border border-gray-200 shadow-sm">
+        <div className="flex-1 relative group">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 group-focus-within:text-gray-900 transition-colors" />
+          <input
+            type="text"
+            placeholder="Buscar eventos por espacio, usuario o propósito..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-12 pr-4 py-3 bg-white border border-gray-200 rounded-2xl text-sm focus:ring-4 focus:ring-gray-900/5 focus:border-gray-900 outline-none transition-all placeholder:text-gray-400 font-medium"
+          />
+        </div>
+        <div className="relative min-w-[200px]">
+          <Filter className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+          <select
+            value={filterStatus}
+            onChange={(e) => setFilterStatus(e.target.value)}
+            className="w-full pl-10 pr-10 py-3 bg-white border border-gray-200 rounded-2xl text-sm focus:ring-4 focus:ring-gray-900/5 focus:border-gray-900 outline-none transition-all appearance-none cursor-pointer font-bold text-gray-700"
+          >
+            <option value="todos">Estado: Todos</option>
+            <option value="confirmada">Confirmadas</option>
+            <option value="pendiente">Pendientes</option>
+          </select>
+        </div>
+      </div>
+
       {selectInfo && (
         <ReservationModal
           selectInfo={selectInfo}
@@ -308,7 +360,7 @@ export default function CalendarView({ isSidebarOpen }) {
         />
       )}
 
-      <div className="flex flex-wrap gap-x-5 gap-y-2 mb-4 text-xs text-gray-500">
+      <div className="flex flex-wrap gap-x-5 gap-y-2 mb-4 text-xs text-gray-500 px-2">
         <span className="flex items-center gap-1.5">
           <span className="w-2.5 h-2.5 rounded-full bg-green-600" /> Confirmada
         </span>
@@ -326,15 +378,13 @@ export default function CalendarView({ isSidebarOpen }) {
         selectable={user.rol !== 'admin'} 
         selectMirror={user.rol !== 'admin'}
         select={handleDateSelect}
-        selectMirror
         eventClick={handleEventClick}
-        events={eventos}
+        events={filteredEventos} // Usamos los eventos filtrados por la barra de búsqueda
         slotMinTime="07:00:00"
         slotMaxTime="21:00:00"
-        
+        hiddenDays={[0]} // Deshabilita los domingos (0 = Domingo)
         slotDuration="01:00:00" 
         slotLabelInterval="01:00"
-        
         allDaySlot={false}
         height="auto"
         locale="es"
