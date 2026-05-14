@@ -260,18 +260,21 @@ const gestionarReserva = async (req, res) => {
           hora_inicio: { [Op.lt]: reserva.hora_fin },
           hora_fin:    { [Op.gt]: reserva.hora_inicio },
         },
-        include: [{ model: Usuario, attributes: ['nombre_completo', 'correo'] }]
+        include: [
+          { model: Usuario, attributes: ['nombre_completo', 'correo'] },
+          { model: Recurso, attributes: ['nombre'] }
+        ]
       });
 
-      const esDocente = reserva.Usuario?.rol === 'docente';
-      const motivoPrioridad = `Su solicitud ha sido cancelada automáticamente. Se ha aprobado una reserva de mayor o igual prioridad (${esDocente ? 'Prioridad Docente' : 'Orden de llegada'}) para el mismo horario y espacio.`;
+      const motivoPrioridad =
+        'Su solicitud ha sido cancelada automáticamente porque se aprobó otra reserva para el mismo espacio y horario.';
 
       if (solicitudesEnConflicto.length > 0) {
         await Reserva.update(
           { estado: 'cancelada', motivo_cancelacion: motivoPrioridad },
           {
             where: {
-              id_reserva: { [Op.in]: solicitudesEnConflicto.map(s => s.id_reserva) }
+              id_reserva: { [Op.in]: solicitudesEnConflicto.map((s) => s.id_reserva) }
             }
           }
         );
@@ -284,9 +287,10 @@ const gestionarReserva = async (req, res) => {
               estado: 'cancelada',
               reserva: sol,
               motivo: motivoPrioridad
-            }).catch(e => console.error("Error envío correo conflicto:", e));
+            }).catch((e) => console.error('Error envío correo conflicto:', e));
           }
         }
+
         canceladas = solicitudesEnConflicto.length;
       }
     }
