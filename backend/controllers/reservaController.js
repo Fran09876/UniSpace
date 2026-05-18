@@ -3,6 +3,7 @@ const { Op } = require('sequelize');
 const Reserva = require('../models/Reserva');
 const Recurso = require('../models/Recurso');
 const Usuario = require('../models/Usuario');
+const Persona = require('../models/Persona'); // 🔥 IMPORTANTE: Importamos el modelo Persona
 const { enviarCorreoReserva } = require('../services/emailService');
 
 const STATUS_COLORS = {
@@ -119,7 +120,11 @@ const obtenerEventosCalendario = async (req, res) => {
       where: { estado: { [Op.in]: ['pendiente', 'confirmada'] } },
       include: [
         { model: Recurso, attributes: ['nombre'] },
-        { model: Usuario, attributes: ['nombre_completo'] },
+        { 
+          model: Usuario, 
+          attributes: ['id_usuario'], // 🔥 Extraemos el id base
+          include: [{ model: Persona, attributes: ['nombre_completo'] }] // 🔥 Buscamos el nombre en Persona
+        },
       ],
     });
 
@@ -138,7 +143,7 @@ const obtenerEventosCalendario = async (req, res) => {
         extendedProps: {
           estado:    r.estado,
           proposito: r.proposito,
-          usuario:   r.Usuario?.nombre_completo,
+          usuario:   r.Usuario?.Persona?.nombre_completo, // 🔥 Ajustado a la nueva estructura
           recurso:   r.Recurso?.nombre,
         },
       };
@@ -174,12 +179,23 @@ const obtenerReservasPendientes = async (req, res) => {
       where: { estado: 'pendiente' },
       include: [
         { model: Recurso, attributes: ['nombre', 'tipo'] },
-        { model: Usuario, attributes: ['nombre_completo', 'correo', 'rol'] },
+        { 
+          model: Usuario, 
+          attributes: ['correo', 'rol'], // 🔥 Limpiamos atributos de usuario
+          include: [{ model: Persona, attributes: ['nombre_completo'] }] // 🔥 Traemos el nombre desde Persona
+        },
       ],
       order: [['fecha', 'ASC'], ['hora_inicio', 'ASC']],
     });
 
-    const plain = reservas.map((r) => r.toJSON());
+    const plain = reservas.map((r) => {
+      // 🔥 Aplanamos el objeto para que React lo lea igual que antes
+      const jsonR = r.toJSON();
+      if (jsonR.Usuario && jsonR.Usuario.Persona) {
+        jsonR.Usuario.nombre_completo = jsonR.Usuario.Persona.nombre_completo;
+      }
+      return jsonR;
+    });
 
     plain.sort((a, b) => {
       const pa = NIVEL_PRIORIDAD[a.Usuario?.rol] ?? 0;
@@ -229,7 +245,11 @@ const gestionarReserva = async (req, res) => {
 
     const reserva = await Reserva.findByPk(id_reserva, {
       include: [
-        { model: Usuario, attributes: ['nombre_completo', 'correo', 'rol'] },
+        { 
+          model: Usuario, 
+          attributes: ['correo', 'rol'], 
+          include: [{ model: Persona, attributes: ['nombre_completo'] }] // 🔥 Relación actualizada
+        },
         { model: Recurso, attributes: ['nombre'] },
       ],
     });
@@ -249,7 +269,6 @@ const gestionarReserva = async (req, res) => {
 
     let canceladas = 0;
 
-    // LÓGICA MODIFICADA: Encontrar conflictos y asignar el motivo automático
     if (nuevoEstado === 'confirmada') {
       const solicitudesEnConflicto = await Reserva.findAll({
         where: {
@@ -261,7 +280,11 @@ const gestionarReserva = async (req, res) => {
           hora_fin:    { [Op.gt]: reserva.hora_inicio },
         },
         include: [
-          { model: Usuario, attributes: ['nombre_completo', 'correo'] },
+          { 
+            model: Usuario, 
+            attributes: ['correo'],
+            include: [{ model: Persona, attributes: ['nombre_completo'] }] // 🔥 Relación actualizada
+          },
           { model: Recurso, attributes: ['nombre'] }
         ]
       });
@@ -283,7 +306,7 @@ const gestionarReserva = async (req, res) => {
           if (sol.Usuario?.correo) {
             enviarCorreoReserva({
               to: sol.Usuario.correo,
-              nombre: sol.Usuario.nombre_completo,
+              nombre: sol.Usuario.Persona?.nombre_completo, // 🔥 Acceso correcto al nombre
               estado: 'cancelada',
               reserva: sol,
               motivo: motivoPrioridad
@@ -295,11 +318,10 @@ const gestionarReserva = async (req, res) => {
       }
     }
 
-    // ENVÍO DE CORREO: Pasamos explícitamente el motivo_cancelacion a la reserva gestionada manualmente
     if (reserva.Usuario?.correo) {
       enviarCorreoReserva({
         to:     reserva.Usuario.correo,
-        nombre: reserva.Usuario.nombre_completo,
+        nombre: reserva.Usuario.Persona?.nombre_completo, // 🔥 Acceso correcto al nombre
         estado: nuevoEstado,
         reserva: reserva,
         motivo: motivo_cancelacion 
@@ -328,7 +350,11 @@ const cancelarPorMantenimiento = async (req, res) => {
         estado: { [Op.in]: ['pendiente', 'confirmada'] }
       },
       include: [
-        { model: Usuario, attributes: ['nombre_completo', 'correo'] },
+        { 
+          model: Usuario, 
+          attributes: ['correo'],
+          include: [{ model: Persona, attributes: ['nombre_completo'] }] // 🔥 Relación actualizada
+        },
         { model: Recurso, attributes: ['nombre'] }
       ]
     });
@@ -355,7 +381,7 @@ const cancelarPorMantenimiento = async (req, res) => {
       if (reserva.Usuario?.correo) {
         enviarCorreoReserva({
           to:     reserva.Usuario.correo,
-          nombre: reserva.Usuario.nombre_completo,
+          nombre: reserva.Usuario.Persona?.nombre_completo, // 🔥 Acceso correcto al nombre
           estado: 'cancelada',
           reserva: reserva,
           motivo: motivoMantenimiento,

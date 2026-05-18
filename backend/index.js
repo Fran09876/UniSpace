@@ -3,13 +3,11 @@ const express   = require('express');
 const cors      = require('cors');
 const sequelize = require('./database');
 
-// 1. Importar modelos
+// 1. Importar modelos (¡Actualizados!)
+const Persona = require('./models/Persona'); 
 const Usuario = require('./models/Usuario');
 const Recurso = require('./models/Recurso');
 const Reserva = require('./models/Reserva');
-const Estudiante = require('./models/Estudiante');
-const Docente = require('./models/Docente');
-const Administrador = require('./models/Administrador');
 
 // 2. Asociaciones — deben definirse ANTES de importar rutas
 Usuario.hasMany(Reserva, { foreignKey: 'id_usuario' });
@@ -17,12 +15,7 @@ Recurso.hasMany(Reserva, { foreignKey: 'id_recurso' });
 Reserva.belongsTo(Usuario, { foreignKey: 'id_usuario' });
 Reserva.belongsTo(Recurso, { foreignKey: 'id_recurso' });
 
-Usuario.hasOne(Estudiante, { foreignKey: 'id_usuario' });
-Usuario.hasOne(Docente, { foreignKey: 'id_usuario' });
-Usuario.hasOne(Administrador, { foreignKey: 'id_usuario' });
-Estudiante.belongsTo(Usuario, { foreignKey: 'id_usuario' });
-Docente.belongsTo(Usuario, { foreignKey: 'id_usuario' });
-Administrador.belongsTo(Usuario, { foreignKey: 'id_usuario' });
+// (La asociación entre Persona y Usuario ya la dejamos lista dentro de Usuario.js)
 
 // 3. Rutas
 const authRoutes    = require('./routes/authRoutes');
@@ -34,7 +27,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// 🔥 Mueve el logger AQUÍ (antes de las rutas)
+// 🔥 Logger para ver las peticiones
 app.use((req, res, next) => {
   console.log(`📨 ${req.method} ${req.path}`);
   next();
