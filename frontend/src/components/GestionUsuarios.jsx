@@ -177,6 +177,23 @@ export default function GestionUsuarios() {
     return 'Administrador';
   };
 
+  // 🔥 Función para validar si el formulario está completo dinámicamente
+  const isFormValid = () => {
+    if (!formData.nombre_completo.trim() || !formData.correo.trim() || !formData.curp.trim()) {
+      return false;
+    }
+    if (!modoEdicion && !formData.password.trim()) {
+      return false;
+    }
+    if (formData.rol === 'estudiante' && !formData.carrera.trim()) {
+      return false;
+    }
+    if (formData.rol === 'docente' && (!formData.especialidad.trim() || !formData.grado_academico.trim())) {
+      return false;
+    }
+    return true;
+  };
+
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
@@ -420,6 +437,7 @@ export default function GestionUsuarios() {
                     onChange={(e) => setFormData({ ...formData, carrera: e.target.value })}
                     className="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-gray-900"
                     placeholder="Ej. Ingeniería en Sistemas"
+                    required
                   />
                 </label>
               )}
@@ -434,6 +452,7 @@ export default function GestionUsuarios() {
                       onChange={(e) => setFormData({ ...formData, especialidad: e.target.value })}
                       className="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-gray-900"
                       placeholder="Ej. Redes y Telecomunicaciones"
+                      required
                     />
                   </label>
                   <label className="space-y-2 text-sm text-gray-700">
@@ -444,6 +463,7 @@ export default function GestionUsuarios() {
                       onChange={(e) => setFormData({ ...formData, grado_academico: e.target.value })}
                       className="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-gray-900"
                       placeholder="Ej. Maestro en Ciencias"
+                      required
                     />
                   </label>
                 </>
@@ -463,13 +483,7 @@ export default function GestionUsuarios() {
               </button>
               <button
                 type="submit"
-                disabled={
-                  creando ||
-                  !formData.nombre_completo.trim() ||
-                  !formData.correo.trim() ||
-                  !formData.curp.trim() ||
-                  (!modoEdicion && !formData.password.trim())
-                }
+                disabled={creando || !isFormValid()}
                 className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 text-sm font-semibold text-white bg-gray-900 rounded-2xl hover:bg-black transition-colors disabled:opacity-50"
               >
                 {creando ? 'Guardando...' : modoEdicion ? 'Actualizar usuario' : 'Registrar usuario'}

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Check, X, Clock, User, MapPin, RefreshCw,
   ClipboardList, Calendar, AlertCircle,
-  UserCheck, GraduationCap,
+  Shield, UserCheck, GraduationCap,
   Search, Filter
 } from 'lucide-react';
 import { api } from '../utils/api';
@@ -13,10 +13,28 @@ const PRIORIDAD_CONFIG = {
 };
 
 const fmt = {
-  date: (d) => d
-    ? new Date(d).toLocaleDateString('es-MX', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })
-    : '—',
-  time: (t) => t ? String(t).substring(0, 5) : '—',
+  date: (d) => {
+    if (!d) return '—';
+
+    const [year, month, day] = String(d)
+      .substring(0, 10)
+      .split('-');
+
+    const fechaLocal = new Date(
+      Number(year),
+      Number(month) - 1,
+      Number(day)
+    );
+
+    return fechaLocal.toLocaleDateString('es-MX', {
+      weekday: 'short',
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    });
+  },
+
+  time: (t) => (t ? String(t).substring(0, 5) : '—'),
 };
 
 const safeJson = async (res) => {
@@ -53,7 +71,7 @@ function SolicitudCard({ req, isProcessing, onAction }) {
             {req.tiene_conflicto && (
               <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-amber-50 border border-amber-200 text-amber-700 text-xs font-bold rounded-full">
                 <AlertCircle className="w-3 h-3" />
-                Conflicto detectado
+                {req.conflictos_count} en conflicto
               </span>
             )}
           </div>
@@ -82,7 +100,7 @@ function SolicitudCard({ req, isProcessing, onAction }) {
 
           {req.tiene_conflicto && (
             <p className="mt-2.5 text-xs text-amber-700 bg-amber-50 rounded-lg px-3 py-1.5 border border-amber-100">
-              ⚠ Al confirmar esta solicitud, las demás en este bloque de conflicto se rechazarán automáticamente.
+              ⚠ Al confirmar, las demás solicitudes en conflicto se cancelarán automáticamente.
             </p>
           )}
         </div>
@@ -128,9 +146,11 @@ export default function GestionSolicitudes() {
   const [toast,      setToast]      = useState(null);
   const [fetchError, setFetchError] = useState(null);
 
+  // --- Estados de Búsqueda y Filtro ---
   const [searchTerm, setSearchTerm] = useState('');
   const [filterPriority, setFilterPriority] = useState('todos');
 
+  // Modal para cancelación con motivo
   const [cancelModal, setCancelModal] = useState({ mostrar: false, idReserva: null, motivo: '' });
   const [cancelandoConMotivo, setCancelandoConMotivo] = useState(false);
 
@@ -193,34 +213,20 @@ export default function GestionSolicitudes() {
     }
   };
 
-  // --- Lógica de Agrupación por Conflicto ---
-  const { conflictGroups, singles } = useMemo(() => {
-    const filtered = requests.filter((req) => {
+  // --- Lógica de Filtrado (Memoizada) ---
+  const filteredRequests = useMemo(() => {
+    return requests.filter((req) => {
       const searchString = `${req.Usuario?.nombre_completo || ''} ${req.Recurso?.nombre || ''} ${req.proposito || ''}`.toLowerCase();
       const matchesSearch = searchString.includes(searchTerm.toLowerCase());
       const matchesPriority = filterPriority === 'todos' || req.Usuario?.rol === filterPriority;
+
       return matchesSearch && matchesPriority;
     });
-
-    const groups = {};
-    const individual = [];
-
-    filtered.forEach(req => {
-      if (req.tiene_conflicto) {
-        // Agrupamos por ID del recurso y Fecha para identificar la "pelea" por el espacio
-        const key = `${req.id_recurso}-${req.fecha}`;
-        if (!groups[key]) groups[key] = [];
-        groups[key].push(req);
-      } else {
-        individual.push(req);
-      }
-    });
-
-    return {
-      conflictGroups: Object.values(groups),
-      singles: individual
-    };
   }, [requests, searchTerm, filterPriority]);
+
+  const conConflicto  = filteredRequests.filter((r) => r.tiene_conflicto);
+  const sinConflicto  = filteredRequests.filter((r) => !r.tiene_conflicto);
+  const hayConflictos = conConflicto.length > 0;
 
   return (
     <div className="animate-in fade-in duration-500 relative">
@@ -243,12 +249,12 @@ export default function GestionSolicitudes() {
               ? 'Cargando...'
               : fetchError
               ? 'Error al cargar solicitudes'
-              : `${conflictGroups.flat().length + singles.length} solicitudes por gestionar`}
+              : `${filteredRequests.length} solicitud${filteredRequests.length !== 1 ? 'es' : ''} por gestionar`}
           </p>
         </div>
       </div>
 
-      {/* Barra de Búsqueda y Filtros */}
+      {/* --- BARRA DE BÚSQUEDA Y FILTROS PREMIUM --- */}
       <div className="flex flex-col md:flex-row gap-4 mb-8 bg-white/50 backdrop-blur-md p-4 rounded-[28px] border border-gray-200 shadow-sm">
         <div className="flex-1 relative group">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 group-focus-within:text-gray-900 transition-colors" />
@@ -273,86 +279,122 @@ export default function GestionSolicitudes() {
               <option value="estudiante">Solo Estudiantes (Normal)</option>
             </select>
           </div>
+
           <button
             onClick={fetchRequests}
             disabled={loading}
-            className="p-3 bg-white border border-gray-200 rounded-2xl text-gray-600 hover:bg-gray-50 transition-all active:scale-95 disabled:opacity-50"
+            className="p-3 bg-white border border-gray-200 rounded-2xl text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-all active:scale-95 disabled:opacity-50"
+            title="Actualizar"
           >
             <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
           </button>
         </div>
       </div>
 
-      {/* Estados de Carga y Error */}
-      {loading && <div className="text-center py-20 text-gray-400">Cargando solicitudes...</div>}
-      
-      {!loading && fetchError && (
-        <div className="bg-white rounded-2xl border border-red-100 p-10 text-center">
-          <AlertCircle className="w-10 h-10 text-red-400 mx-auto mb-4" />
-          <p className="text-gray-800 font-semibold">No se pudieron cargar las solicitudes</p>
-          <button onClick={fetchRequests} className="mt-4 px-5 py-2 bg-gray-900 text-white rounded-xl text-sm">Reintentar</button>
-        </div>
-      )}
-
-      {/* --- SECCIÓN: CONFLICTOS AGRUPADOS --- */}
-      {!loading && !fetchError && conflictGroups.length > 0 && (
-        <div className="mb-10 space-y-8">
-          <div className="flex items-center gap-2 px-2">
-            <AlertCircle className="w-5 h-5 text-amber-500" />
-            <h3 className="text-sm font-black text-amber-800 uppercase tracking-widest">
-              Solicitudes en Conflicto Requeridas
-            </h3>
-          </div>
-
-          {conflictGroups.map((grupo, idx) => (
-            <div key={idx} className="bg-amber-50/30 border border-amber-100 rounded-[32px] p-6 space-y-4">
-              <div className="flex items-center justify-between px-2">
-                <span className="text-xs font-bold text-amber-700 bg-amber-100 px-3 py-1 rounded-full uppercase">
-                  Grupo de conflicto #{idx + 1}
-                </span>
-                <span className="text-sm font-medium text-amber-900">
-                  {grupo[0].Recurso?.nombre} — {fmt.date(grupo[0].fecha)}
-                </span>
-              </div>
-              <div className="grid gap-3">
-                {grupo.map((req) => (
-                  <SolicitudCard
-                    key={req.id_reserva}
-                    req={req}
-                    isProcessing={processing === req.id_reserva}
-                    onAction={handleAction}
-                  />
-                ))}
-              </div>
-            </div>
+      {/* Leyenda de prioridad */}
+      {!loading && !fetchError && requests.length > 0 && (
+        <div className="flex flex-wrap items-center gap-3 mb-6 px-4 py-3 bg-gray-50 rounded-2xl border border-gray-100">
+          <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide w-full sm:w-auto">
+            Sistema de prioridad:
+          </span>
+          {Object.entries(PRIORIDAD_CONFIG).map(([rol, cfg]) => (
+            <span key={rol} className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold border ${cfg.classes}`}>
+              <cfg.Icon className="w-3 h-3" />
+              {rol.charAt(0).toUpperCase() + rol.slice(1)}: Nivel {cfg.nivel}
+            </span>
           ))}
         </div>
       )}
 
-      {/* --- SECCIÓN: SOLICITUDES REGULARES --- */}
-      {!loading && !fetchError && (
-        <div className="space-y-4">
-          {conflictGroups.length > 0 && (
-            <h3 className="text-sm font-bold text-gray-400 uppercase tracking-widest px-2 mb-4">
-              Otras Solicitudes
+      {/* Estado: cargando */}
+      {loading && (
+        <div className="flex items-center justify-center h-48 text-gray-400 gap-3">
+          <RefreshCw className="w-5 h-5 animate-spin" />
+          <span className="text-sm">Cargando solicitudes...</span>
+        </div>
+      )}
+
+      {/* Estado: error de carga */}
+      {!loading && fetchError && (
+        <div className="bg-white rounded-2xl border border-red-100 p-10 text-center">
+          <div className="w-14 h-14 bg-red-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
+            <AlertCircle className="w-7 h-7 text-red-400" />
+          </div>
+          <p className="text-gray-800 font-semibold mb-1">No se pudieron cargar las solicitudes</p>
+          <p className="text-sm text-gray-400 mb-6">{fetchError}</p>
+          <button
+            onClick={fetchRequests}
+            className="inline-flex items-center gap-2 px-5 py-2.5 bg-gray-900 text-white text-sm font-semibold rounded-xl hover:bg-black transition-colors"
+          >
+            <RefreshCw className="w-4 h-4" />
+            Reintentar
+          </button>
+        </div>
+      )}
+
+      {/* Estado: lista totalmente vacía desde la DB */}
+      {!loading && !fetchError && requests.length === 0 && (
+        <div className="bg-white rounded-2xl border border-gray-100 p-16 text-center">
+          <div className="w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-5">
+            <ClipboardList className="w-7 h-7 text-gray-400" />
+          </div>
+          <p className="text-gray-700 font-semibold mb-1">No hay solicitudes pendientes</p>
+          <p className="text-sm text-gray-400">Todas las solicitudes han sido gestionadas.</p>
+        </div>
+      )}
+
+      {/* Estado: Búsqueda sin resultados */}
+      {!loading && !fetchError && requests.length > 0 && filteredRequests.length === 0 && (
+        <div className="bg-white border border-gray-100 rounded-2xl p-16 text-center">
+          <div className="w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-5">
+            <Search className="w-7 h-7 text-gray-400" />
+          </div>
+          <p className="text-gray-700 font-semibold mb-1">No se encontraron resultados</p>
+          <p className="text-sm text-gray-400 mb-6">Prueba ajustando los filtros o el término de búsqueda.</p>
+        </div>
+      )}
+
+      {/* Sección: con conflicto */}
+      {!loading && !fetchError && hayConflictos && (
+        <div className="mb-8">
+          <div className="flex items-center gap-2 mb-3">
+            <AlertCircle className="w-4 h-4 text-amber-500" />
+            <h3 className="text-sm font-bold text-amber-700">
+              Solicitudes en conflicto — mismo espacio y horario
             </h3>
-          )}
-          
-          {singles.length > 0 ? (
-            singles.map((req) => (
+            <span className="px-2 py-0.5 bg-amber-50 border border-amber-200 text-amber-700 text-xs font-bold rounded-full">
+              {conConflicto.length}
+            </span>
+          </div>
+          <div className="space-y-3">
+            {conConflicto.map((req) => (
               <SolicitudCard
                 key={req.id_reserva}
                 req={req}
                 isProcessing={processing === req.id_reserva}
                 onAction={handleAction}
               />
-            ))
-          ) : conflictGroups.length === 0 && (
-            <div className="bg-white rounded-2xl border border-gray-100 p-16 text-center">
-              <ClipboardList className="w-12 h-12 text-gray-200 mx-auto mb-4" />
-              <p className="text-gray-500">No hay solicitudes pendientes.</p>
-            </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Sección: sin conflicto */}
+      {!loading && !fetchError && sinConflicto.length > 0 && (
+        <div>
+          {hayConflictos && (
+            <h3 className="text-sm font-semibold text-gray-500 mb-3">Otras solicitudes</h3>
           )}
+          <div className="space-y-3">
+            {sinConflicto.map((req) => (
+              <SolicitudCard
+                key={req.id_reserva}
+                req={req}
+                isProcessing={processing === req.id_reserva}
+                onAction={handleAction}
+              />
+            ))}
+          </div>
         </div>
       )}
 
@@ -363,39 +405,47 @@ export default function GestionSolicitudes() {
             onSubmit={async (e) => {
               e.preventDefault();
               const motivoActual = cancelModal.motivo.trim();
-              if (!motivoActual) return;
+              if (!motivoActual) {
+                showToast('El motivo es obligatorio.', 'error');
+                return;
+              }
               setCancelandoConMotivo(true);
               setCancelModal({ mostrar: false, idReserva: null, motivo: '' });
               await handleAction(cancelModal.idReserva, 'cancelada', false, motivoActual);
             }}
-            className="w-full max-w-md bg-white rounded-[28px] shadow-2xl p-8 space-y-5"
+            className="w-full max-w-md bg-white rounded-[28px] shadow-2xl p-6 md:p-8 space-y-5"
           >
             <div>
-              <h3 className="text-xl font-bold text-gray-900">Rechazar solicitud</h3>
-              <p className="text-sm text-gray-500 mt-1">Ingresa el motivo del rechazo para notificar al usuario.</p>
+              <h3 className="text-xl font-bold text-gray-900">Cancelar solicitud</h3>
+              <p className="text-sm text-gray-500">Escribe el motivo de la cancelación. Se enviará un correo al usuario.</p>
             </div>
-            <textarea
-              value={cancelModal.motivo}
-              onChange={(e) => setCancelModal({ ...cancelModal, motivo: e.target.value })}
-              placeholder="Ej. El espacio no está disponible por evento interno..."
-              className="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 text-sm outline-none focus:ring-2 focus:ring-red-500 resize-none"
-              rows="4"
-              required
-            />
+
+            <div className="space-y-2">
+              <label className="block text-sm font-semibold text-gray-700">Motivo de cancelación</label>
+              <textarea
+                value={cancelModal.motivo}
+                onChange={(e) => setCancelModal({ ...cancelModal, motivo: e.target.value })}
+                placeholder="Ej. El espacio ha sido bloqueado por mantenimiento..."
+                className="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-red-500 resize-none"
+                rows="4"
+                required
+              />
+            </div>
+
             <div className="flex gap-3">
               <button
                 type="button"
                 onClick={() => setCancelModal({ mostrar: false, idReserva: null, motivo: '' })}
-                className="flex-1 px-4 py-3 text-sm font-bold text-gray-500 bg-gray-100 rounded-2xl hover:bg-gray-200"
+                className="flex-1 px-4 py-3 text-sm font-semibold text-gray-700 bg-gray-100 rounded-2xl hover:bg-gray-200 transition-colors"
               >
-                Cerrar
+                Cancelar
               </button>
               <button
                 type="submit"
                 disabled={cancelandoConMotivo || !cancelModal.motivo.trim()}
-                className="flex-1 px-4 py-3 text-sm font-bold text-white bg-red-600 rounded-2xl hover:bg-red-700 disabled:opacity-50"
+                className="flex-1 px-4 py-3 text-sm font-semibold text-white bg-red-600 rounded-2xl hover:bg-red-700 transition-colors disabled:opacity-50"
               >
-                {cancelandoConMotivo ? 'Enviando...' : 'Confirmar Rechazo'}
+                {cancelandoConMotivo ? 'Enviando...' : 'Rechazar'}
               </button>
             </div>
           </form>

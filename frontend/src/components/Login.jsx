@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { GoogleLogin, GoogleOAuthProvider } from '@react-oauth/google';
-import { api } from '../utils/api'; // <-- ¡Añadimos la importación de la API!
-
+import { api } from '../utils/api';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -18,6 +17,15 @@ export default function Login() {
   const [codigo, setCodigo] = useState("");
   const [nuevoPassword, setNuevoPassword] = useState("");
   const [view, setView] = useState('login');
+
+  // Estados para completar perfil con Google
+  const [googleUser, setGoogleUser] = useState(null);
+  const [rolGoogle, setRolGoogle] = useState('estudiante');
+  const [curpGoogle, setCurpGoogle] = useState('');
+  const [carreraGoogle, setCarreraGoogle] = useState('');
+  const [especialidadGoogle, setEspecialidadGoogle] = useState('');
+  const [gradoGoogle, setGradoGoogle] = useState('');
+  const [passwordGoogle, setPasswordGoogle] = useState('');
 
   // LOGIN NORMAL
   const handleLogin = async (e) => {
@@ -38,7 +46,14 @@ export default function Login() {
       if (response.ok && data.token) {
         localStorage.setItem('token', data.token);
         localStorage.setItem('user', JSON.stringify(data.usuario));
-        navigate('/dashboard');
+        
+        // El backend ya hizo todo el trabajo de auto-sanación. 
+        // Solo confiamos en su bandera perfil_completo.
+        if (data.usuario.perfil_completo === false || data.usuario.perfil_completo === 0) {
+          navigate('/completar-registro');
+        } else {
+          navigate('/dashboard');
+        }
       } else {
         setError(data.mensaje || 'Error al iniciar sesión');
       }
@@ -51,6 +66,7 @@ export default function Login() {
 
   // LOGIN CON GOOGLE
   const handleGoogleSuccess = async (credentialResponse) => {
+    setError('');
     try {
       const response = await fetch('http://localhost:4000/api/auth/google', {
         method: 'POST',
@@ -63,12 +79,62 @@ export default function Login() {
       if (response.ok && data.token) {
         localStorage.setItem('token', data.token);
         localStorage.setItem('user', JSON.stringify(data.usuario));
-        navigate('/dashboard');
+        
+        if (data.requiereCompletarPerfil) {
+          setGoogleUser(data.usuario);
+          setView('completeProfile');
+        } else {
+          navigate('/dashboard');
+        }
       } else {
         setError(data.mensaje || 'Error al autenticar con Google');
       }
     } catch (err) {
       setError('Error al conectar con el servidor de autenticación');
+    }
+  };
+
+  // COMPLETAR PERFIL (Viene de Google)
+  const handleCompletarPerfilGoogle = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`http://localhost:4000/api/auth/completar-google/${googleUser.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          id_usuario: googleUser.id,
+          rol: rolGoogle,
+          curp: curpGoogle,
+          carrera: carreraGoogle,
+          especialidad: especialidadGoogle,
+          grado_academico: gradoGoogle,
+          password: passwordGoogle
+        })
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        localStorage.setItem('user', JSON.stringify({
+          ...googleUser,
+          rol: rolGoogle,
+          perfil_completo: true
+        }));
+        navigate('/dashboard');
+      } else {
+        setError(data.mensaje || 'Error al completar perfil');
+      }
+    } catch {
+      setError('Error al conectar con el servidor');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -195,10 +261,19 @@ export default function Login() {
       {/* Right Pane - Form */}
       <div className="w-full lg:w-1/2 flex items-center justify-center bg-white px-6 py-12">
         <div className="max-w-md w-full">
-          <h1 className="text-3xl font-semibold mb-2 text-black text-center">¡Bienvenido a UniSpace!</h1>
+          {view !== 'completeProfile' && <h1 className="text-3xl font-semibold mb-2 text-black text-center">¡Bienvenido a UniSpace!</h1>}
           {view === 'login' && <p className="text-sm text-gray-500 text-center mb-6">Ingresa tus credenciales para gestionar tus espacios</p>}
 
-{/* GOOGLE LOGIN REAL */}
+          {/* MENSAJE DE ERROR / ÉXITO */}
+          {error && (
+            <div className={`mb-4 text-sm p-3 rounded-xl border text-center font-medium ${
+              error.includes('✅') ? 'bg-green-50 text-green-700 border-green-200' : 'text-red-600 bg-red-50 border-red-200'
+            }`}>
+              {error}
+            </div>
+          )}
+
+          {/* VISTA 1: LOGIN */}
           {view === 'login' && (
             <>
               <div className="mb-4 flex justify-center">
@@ -217,20 +292,7 @@ export default function Login() {
               <div className="my-4 text-sm text-gray-600 text-center">
                 <p>o con email institucional</p>
               </div>
-            </>
-          )}
-          {/* MENSAJE DE ERROR / ÉXITO */}
-          {error && (
-            <div className={`mb-4 text-sm p-3 rounded-xl border text-center font-medium ${
-              error.includes('✅') ? 'bg-green-50 text-green-700 border-green-200' : 'text-red-600 bg-red-50 border-red-200'
-            }`}>
-              {error}
-            </div>
-          )}
 
-          {/* VISTA 1: LOGIN */}
-          {view === 'login' && (
-            <>
               <form onSubmit={handleLogin} className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Nombre de usuario o Correo</label>
@@ -262,6 +324,78 @@ export default function Login() {
                 </button>
               </div>
             </>
+          )}
+
+          {/* VISTA 1.5: COMPLETAR PERFIL GOOGLE */}
+          {view === 'completeProfile' && (
+            <form onSubmit={handleCompletarPerfilGoogle} className="space-y-4">
+              <h2 className="text-2xl font-bold text-center mb-6">Completa tu registro</h2>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Rol</label>
+                <select
+                  value={rolGoogle}
+                  onChange={(e) => setRolGoogle(e.target.value)}
+                  className="mt-1 p-2.5 w-full border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-900 transition-colors"
+                >
+                  <option value="estudiante">Estudiante</option>
+                  <option value="docente">Docente</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">CURP</label>
+                <input
+                  type="text" required placeholder="Ej. ABCD123456EFGHIJ78" value={curpGoogle}
+                  onChange={(e) => setCurpGoogle(e.target.value.toUpperCase())}
+                  className="mt-1 p-2.5 w-full border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-900 transition-colors"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Contraseña</label>
+                <input
+                  type="password" required placeholder="Crea tu contraseña" value={passwordGoogle}
+                  onChange={(e) => setPasswordGoogle(e.target.value)}
+                  className="mt-1 p-2.5 w-full border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-900 transition-colors"
+                />
+              </div>
+
+              {rolGoogle === 'estudiante' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Carrera</label>
+                  <input
+                    type="text" required placeholder="Tu carrera" value={carreraGoogle}
+                    onChange={(e) => setCarreraGoogle(e.target.value)}
+                    className="mt-1 p-2.5 w-full border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-900 transition-colors"
+                  />
+                </div>
+              )}
+
+              {rolGoogle === 'docente' && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Especialidad</label>
+                    <input
+                      type="text" required placeholder="Tu especialidad" value={especialidadGoogle}
+                      onChange={(e) => setEspecialidadGoogle(e.target.value)}
+                      className="mt-1 p-2.5 w-full border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-900 transition-colors"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Grado académico</label>
+                    <input
+                      type="text" required placeholder="Ej. Maestría" value={gradoGoogle}
+                      onChange={(e) => setGradoGoogle(e.target.value)}
+                      className="mt-1 p-2.5 w-full border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-900 transition-colors"
+                    />
+                  </div>
+                </>
+              )}
+
+              <button type="submit" disabled={loading}
+                className="w-full bg-gray-900 text-white p-3 rounded-xl font-bold hover:bg-black transition-colors disabled:opacity-50"
+              >
+                {loading ? 'Guardando...' : 'Completar registro'}
+              </button>
+            </form>
           )}
 
           {/* VISTA 2: PEDIR CÓDIGO */}

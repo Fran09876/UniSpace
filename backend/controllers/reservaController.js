@@ -25,8 +25,17 @@ const formatHora = (hora) => {
 
 const marcarReservasExpiradas = async () => {
   const ahora = new Date();
-  const fechaHoyStr = ahora.toISOString().substring(0, 10);
-  const horaActual = String(ahora.getHours()).padStart(2, '0') + ':' + String(ahora.getMinutes()).padStart(2, '0');
+
+  const year = ahora.getFullYear();
+  const month = String(ahora.getMonth() + 1).padStart(2, '0');
+  const day = String(ahora.getDate()).padStart(2, '0');
+
+  const fechaHoyStr = `${year}-${month}-${day}`;
+
+  const horaActual =
+    String(ahora.getHours()).padStart(2, '0') +
+    ':' +
+    String(ahora.getMinutes()).padStart(2, '0');
 
   await Reserva.update(
     { estado: 'expirada' },
@@ -34,7 +43,9 @@ const marcarReservasExpiradas = async () => {
       where: {
         estado: 'confirmada',
         [Op.or]: [
-          { fecha: { [Op.lt]: fechaHoyStr } },
+          {
+            fecha: { [Op.lt]: fechaHoyStr }
+          },
           {
             fecha: fechaHoyStr,
             hora_fin: { [Op.lte]: horaActual }

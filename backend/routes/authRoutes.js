@@ -9,22 +9,48 @@ const {
   obtenerUsuarios, 
   cambiarRol,
   actualizarUsuario,
-  solicitarRecuperacion,   // <-- NUEVO
-  restablecerPassword      // <-- NUEVO
+  completarPerfilGoogle,
+  solicitarRecuperacion,
+  restablecerPassword
 } = require('../controllers/authController');
 
-// Definir los "endpoints" de autenticación
+// ===============================
+// AUTENTICACIÓN
+// ===============================
 router.post('/registro', registrarUsuario);
 router.post('/login', loginUsuario);
 router.post('/google', googleLogin);
 
-// NUEVO: Endpoints de recuperación de contraseña
+// ===============================
+// COMPLETAR DATOS GOOGLE
+// ===============================
+router.put(
+  '/completar-google/:id',
+  verifyToken,
+  completarPerfilGoogle
+);
+
+// ===============================
+// RECUPERACIÓN DE CONTRASEÑA
+// ===============================
 router.post('/forgot-password', solicitarRecuperacion);
 router.post('/reset-password', restablecerPassword);
 
-// Definir los "endpoints" de gestión de usuarios
+// ===============================
+// GESTIÓN DE USUARIOS
+// ===============================
 router.get('/usuarios', verifyToken, obtenerUsuarios);
-router.put('/usuarios/:id', verifyToken, actualizarUsuario);
-router.put('/usuarios/:id/rol', verifyToken, cambiarRol);
+
+router.put(
+  '/usuarios/:id',
+  verifyToken,
+  actualizarUsuario
+);
+
+router.put(
+  '/usuarios/:id/rol',
+  verifyToken,
+  cambiarRol
+);
 
 module.exports = router;

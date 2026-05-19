@@ -10,13 +10,10 @@ const transporter = nodemailer.createTransport({
 
 const enviarCorreoReserva = async ({ to, nombre, estado, reserva, motivo }) => {
   try {
-    const asunto =
-      estado === 'confirmada'
-        ? '✅ Reserva confirmada - UniSpace'
-        : '❌ Reserva rechazada - UniSpace';
-
-    // Aseguramos que el estado mostrado sea amigable
     const estadoTexto = estado === 'confirmada' ? 'confirmada' : 'rechazada';
+    const asunto = estado === 'confirmada'
+      ? '✅ Reserva confirmada - UniSpace'
+      : '❌ Reserva rechazada - UniSpace';
 
     const html = `
       <div style="font-family: sans-serif; max-width: 600px; margin: auto; border: 1px solid #eee; padding: 20px; border-radius: 15px;">
@@ -52,31 +49,38 @@ const enviarCorreoReserva = async ({ to, nombre, estado, reserva, motivo }) => {
     });
 
     console.log('📧 Correo enviado a:', to, '| Motivo incluido:', !!motivo);
-
     return true;
   } catch (error) {
-    console.error('❌ Error enviando correo:', error);
+    console.error('❌ Error enviando correo de reserva:', error);
     return false;
   }
 };
 
 const enviarCorreoRecuperacion = async (correo, codigo) => {
-  const mailOptions = {
-    from: process.env.EMAIL_USER,
-    to: correo,
-    subject: 'Código de recuperación - UniSpace',
-    html: `
+  try {
+    const mailOptions = {
+      from: `"UniSpace" <${process.env.EMAIL_USER}>`,
+      to: correo,
+      subject: 'Código de recuperación - UniSpace',
+      html: `
         <div style="font-family: sans-serif; max-width: 400px; margin: auto; border: 1px solid #eee; padding: 20px; border-radius: 15px;">
           <h2 style="color: #111; text-align: center;">Recuperación de Cuenta</h2>
-          <p style="color: #555;">Has solicitado restablecer tu contraseña. Usa el siguiente código:</p>
-          <div style="background: #f4f4f4; padding: 15px; text-align: center; border-radius: 10px;">
-            <span style="font-size: 24px; font-bold; letter-spacing: 5px; color: #000;">${codigo}</span>
+          <p style="color: #555; text-align: center;">Has solicitado restablecer tu contraseña. Usa el siguiente código:</p>
+          <div style="background: #f4f4f4; padding: 15px; text-align: center; border-radius: 10px; margin: 20px 0;">
+            <span style="font-size: 28px; font-weight: bold; letter-spacing: 5px; color: #000;">${codigo}</span>
           </div>
-          <p style="color: #999; font-size: 12px; margin-top: 20px;">Este código expirará en 15 minutos.</p>
+          <p style="color: #999; font-size: 12px; text-align: center; margin-top: 20px;">Este código expirará en 15 minutos.</p>
         </div>
       `
-  };
-  return transporter.sendMail(mailOptions);
+    };
+
+    await transporter.sendMail(mailOptions);
+    console.log('📧 Correo de recuperación enviado a:', correo);
+    return true;
+  } catch (error) {
+    console.error('❌ Error enviando correo de recuperación:', error);
+    return false;
+  }
 };
 
 module.exports = {
