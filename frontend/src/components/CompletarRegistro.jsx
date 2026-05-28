@@ -25,7 +25,7 @@ export default function CompletarRegistro() {
 
     try {
       const response = await fetch(
-        `http://localhost:4000/api/auth/completar-google/${usuario.id}`,
+        `/api/auth/completar-google/${usuario.id}`,
         {
           method: 'PUT',
           headers: {

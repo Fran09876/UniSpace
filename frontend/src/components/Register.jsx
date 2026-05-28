@@ -57,7 +57,7 @@ export default function Register() {
     }
 
     try {
-      const response = await fetch('http://localhost:4000/api/auth/registro', {
+      const response = await fetch('/api/auth/registro', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData),
@@ -83,7 +83,7 @@ export default function Register() {
   const handleGoogleSuccess = async (credentialResponse) => {
     try {
       console.log('🔵 Registrando/Autenticando con Google...');
-      const response = await fetch('http://localhost:4000/api/auth/google', {
+      const response = await fetch('/api/auth/google', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
