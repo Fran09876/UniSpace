@@ -1,4 +1,9 @@
-const BASE_URL = '/api';
+// Obtenemos la URL del backend desde las variables de entorno de Vite.
+// Si no existe (ej. en desarrollo local), usamos el localhost por defecto.
+const API_DOMAIN = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+
+// Concatenamos el prefijo /api para mantener la estructura de tus endpoints
+const BASE_URL = `${API_DOMAIN}/api`;
 
 async function apiFetch(endpoint, options = {}) {
   const token = localStorage.getItem('token');
