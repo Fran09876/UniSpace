@@ -24,7 +24,13 @@ const reservaRoutes = require('./routes/reservaRoutes');
 
 const app = express();
 
-app.use(cors());
+app.use(cors({
+  origin: [
+    'http://localhost:5173', 
+    'https://unispace-app-pbjy.onrender.com' // Cambia esto si tu frontend de Render generó una URL distinta
+  ]
+}));
+
 app.use(express.json());
 
 // 🔥 Logger para ver las peticiones
@@ -49,11 +55,11 @@ app.use((err, _req, res, _next) => {
 
 const iniciarServidor = async () => {
   try {
-    await sequelize.sync({ alter: true });
+    await sequelize.authenticate();
     console.log('✅ Conexión a PostgreSQL establecida.');
 
     await sequelize.sync({ alter: false });
-    console.log('📦 Modelos sincronizados con la base de datos.');
+    console.log('📦 Modelos validados con la base de datos.');
 
     const PORT = process.env.PORT || 4000;
 
